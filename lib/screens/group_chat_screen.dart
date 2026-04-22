@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/group_service.dart';
@@ -905,60 +906,79 @@ class _GroupInfoSheetState extends State<_GroupInfoSheet> {
     final XFile? image = await _picker.pickImage(
       source: source,
       imageQuality: 85,
-      maxWidth: 800,
     );
     if (image != null) {
-      // Show uploading indicator
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                ),
-                SizedBox(width: 12),
-                Text('Mengunggah foto...'),
-              ],
-            ),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 10),
+      final CroppedFile? croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Group photo is square
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Tata Letak Foto',
+            toolbarColor: RupiaColors.primary,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
           ),
-        );
-      }
+          IOSUiSettings(
+            title: 'Tata Letak Foto',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
 
-      final url =
-          await widget.groupService.updatePhoto(widget.groupId, image.path);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-      if (url != null) {
-        // Update parent first with the confirmed URL
-        final currentName = _group?.name ?? '';
-        widget.onUpdated?.call(currentName, url);
-        // Then reload detail for this sheet
-        await _loadGroupDetail();
+      if (croppedFile != null) {
+        // Show uploading indicator
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Foto grup diperbarui ✓'),
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Mengunggah foto...'),
+                ],
+              ),
               behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 10),
             ),
           );
         }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Gagal mengunggah foto'),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.red,
-            ),
-          );
+
+        final url = await widget.groupService.updatePhoto(widget.groupId, croppedFile.path);
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        if (url != null) {
+          // Update parent first with the confirmed URL
+          final currentName = _group?.name ?? '';
+          widget.onUpdated?.call(currentName, url);
+          // Then reload detail for this sheet
+          await _loadGroupDetail();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Foto grup diperbarui ✓'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gagal mengunggah foto'),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       }
     }

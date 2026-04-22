@@ -340,15 +340,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  void _archiveChat(UserModel user, String roomId) async {
-    await _chat.toggleArchive(roomId, true);
-
+  void _archiveChat(UserModel user, String roomId) {
     setState(() {
       final index = _users.indexWhere((u) => u.uid == user.uid);
       if (index != -1) {
         _users[index] = user.copyWith(isArchived: true);
       }
       _filterUsers(_searchController.text);
+    });
+
+    _chat.toggleArchive(roomId, true).catchError((e) {
+      debugPrint('Error archive chat: $e');
     });
   }
 
@@ -496,14 +498,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               if (direction == DismissDirection.startToEnd) {
                                 _showDeleteOptions(context, group, group.id, true);
                                 return false;
-                              } else if (direction == DismissDirection.endToStart) {
-                                // Group doesn't have archive yet, so we unpin it
-                                await _groupService.pinGroup(group.id, false);
-                                _loadUsers();
+                              }
+                              
+                              if (direction == DismissDirection.endToStart) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Fitur arsip grup belum tersedia')),
+                                );
                                 return false;
                               }
-                              return false;
+                              return true;
                             },
+                            onDismissed: (direction) {},
                             child: _GroupTile(
                               group: group,
                               isDarkMode: isDarkMode,
@@ -566,11 +571,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               if (direction == DismissDirection.startToEnd) {
                                 _showDeleteOptions(context, user, roomId, false);
                                 return false;
-                              } else if (direction == DismissDirection.endToStart) {
-                                _archiveChat(user, roomId);
-                                return false;
                               }
-                              return false;
+                              return true;
+                            },
+                            onDismissed: (direction) {
+                              if (direction == DismissDirection.endToStart) {
+                                _archiveChat(user, roomId);
+                              }
                             },
                             child: _UserTile(
                               key: ValueKey(roomId),

@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../main.dart';
 
 class WalletService {
   static final WalletService _instance = WalletService._internal();
@@ -16,13 +19,39 @@ class WalletService {
     },
   ));
 
-  WalletService._internal();
+  WalletService._internal() {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401) {
+          debugPrint('[WalletService] 401 Unauthenticated — auto logout');
+          await _handleUnauthorized();
+        }
+        return handler.next(error);
+      },
+    ));
+  }
 
   Future<void> _ensureToken() async {
     final auth = AuthService();
     final token = await auth.currentToken;
     if (token != null) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
+    }
+  }
+
+  static bool _isHandlingUnauth = false;
+  Future<void> _handleUnauthorized() async {
+    if (_isHandlingUnauth) return;
+    _isHandlingUnauth = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        Navigator.of(ctx).pushNamedAndRemoveUntil('/login', (_) => false);
+      }
+    } finally {
+      _isHandlingUnauth = false;
     }
   }
 

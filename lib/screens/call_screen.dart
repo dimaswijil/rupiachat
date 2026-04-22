@@ -5,7 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../utils/colors.dart';
 
 // ── Ganti dengan App ID Agora Anda dari console.agora.io ──
-const String agoraAppId = 'YOUR_AGORA_APP_ID';
+const String agoraAppId = 'c10911c3802e494dbb69ac8fefb94d57';
 
 class CallScreen extends StatefulWidget {
   final String channelName;
@@ -45,6 +45,19 @@ class _CallScreenState extends State<CallScreen> {
     await [Permission.microphone, Permission.camera].request();
 
     // Create Agora engine
+    if (agoraAppId == 'YOUR_AGORA_APP_ID' || agoraAppId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Anda belum memasukkan Agora APP ID di call_screen.dart (Baris 8)'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          )
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
     _engine = createAgoraRtcEngine();
     await _engine.initialize(RtcEngineContext(
       appId: agoraAppId,
@@ -56,6 +69,7 @@ class _CallScreenState extends State<CallScreen> {
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           setState(() => _joined = true);
+          debugPrint('Agora User Joined Channel Success: ${connection.channelId}');
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           setState(() {
@@ -63,6 +77,7 @@ class _CallScreenState extends State<CallScreen> {
             _remoteUid = remoteUid;
           });
           _startTimer();
+          debugPrint('Agora Remote User Joined: $remoteUid');
         },
         onUserOffline: (RtcConnection connection, int remoteUid, UserOfflineReasonType reason) {
           setState(() {
@@ -74,10 +89,23 @@ class _CallScreenState extends State<CallScreen> {
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) Navigator.pop(context);
           });
+          debugPrint('Agora Remote User Offline: $remoteUid (Reason: $reason)');
         },
         onError: (ErrorCodeType err, String msg) {
           debugPrint('Agora Error: $err - $msg');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Agora Error ($err): $msg\n(Note: Pastikan project di web Agora.io disetting "Testing Mode" / NO APP CERTIFICATE)'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+              )
+            );
+          }
         },
+        onConnectionStateChanged: (RtcConnection connection, ConnectionStateType state, ConnectionChangedReasonType reason) {
+            debugPrint('Agora Connection State: $state, Reason: $reason');
+        }
       ),
     );
 

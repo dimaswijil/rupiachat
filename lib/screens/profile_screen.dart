@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; // <--- Pastikan ini ada
+import 'package:image_cropper/image_cropper.dart'; // Import buat fitur tata letak
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../utils/colors.dart';
@@ -92,28 +93,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (image != null) {
-        setState(() => _loading = true);
-        
-        final error = await _auth.updateProfilePhoto(image.path);
-        
-        if (error == null) {
-          await _loadProfile();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Foto profil berhasil diperbarui')),
-            );
+        // Fitur tata letak (Crop, Rotate, Scale)
+        final CroppedFile? croppedFile = await ImageCropper().cropImage(
+          sourcePath: image.path,
+          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Paksa jadi kotak untuk profil
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'Tata Letak Foto',
+              toolbarColor: RupiaColors.primary,
+              toolbarWidgetColor: Colors.white,
+              initAspectRatio: CropAspectRatioPreset.square,
+              lockAspectRatio: true,
+              hideBottomControls: false,
+            ),
+            IOSUiSettings(
+              title: 'Tata Letak Foto',
+              aspectRatioLockEnabled: true,
+              resetAspectRatioEnabled: false,
+            ),
+          ],
+        );
+
+        if (croppedFile != null) {
+          setState(() => _loading = true);
+          
+          final error = await _auth.updateProfilePhoto(croppedFile.path);
+          
+          if (error == null) {
+            await _loadProfile();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Foto profil berhasil diperbarui')),
+              );
+            }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(error), backgroundColor: RupiaColors.danger),
+              );
+            }
           }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(error), backgroundColor: RupiaColors.danger),
-            );
-          }
+          setState(() => _loading = false);
         }
-        setState(() => _loading = false);
       }
     } catch (e) {
-      debugPrint('Error picking image: $e');
+      debugPrint('Error picking or cropping image: $e');
     }
   }
 

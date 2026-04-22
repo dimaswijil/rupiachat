@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
+import '../main.dart';
 
 class ChatService {
   static final ChatService _instance = ChatService._internal();
@@ -21,7 +24,17 @@ class ChatService {
     },
   ));
 
-  ChatService._internal();
+  ChatService._internal() {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401) {
+          print('[ChatService] 401 Unauthenticated — auto logout');
+          await _handleUnauthorized();
+        }
+        return handler.next(error);
+      },
+    ));
+  }
 
   // === PUSHER ULTIMATE SINGLETON ===
   static final _pusher = PusherChannelsFlutter.getInstance();
@@ -66,6 +79,22 @@ class ChatService {
 
   void setToken(String token) {
     _dio.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  static bool _isHandlingUnauth = false;
+  Future<void> _handleUnauthorized() async {
+    if (_isHandlingUnauth) return;
+    _isHandlingUnauth = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        Navigator.of(ctx).pushNamedAndRemoveUntil('/login', (_) => false);
+      }
+    } finally {
+      _isHandlingUnauth = false;
+    }
   }
 
   String getRoomId(String uid1, String uid2) {
