@@ -345,49 +345,71 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 heroTag: 'avatar_appbar_${widget.otherUser.uid}',
               ),
               const SizedBox(width: 10),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.otherUser.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15)),
-                Text(
-                  _isOtherUserTyping 
-                      ? 'Sedang mengetik...' 
-                      : (widget.otherUser.isOnline ? 'Online' : 'Offline'),
-                  style: TextStyle(
-                    color: _isOtherUserTyping
-                        ? RupiaColors.gold
-                        : (widget.otherUser.isOnline ? const Color(0xFF86EFAC) : Colors.white54),
-                    fontSize: 11,
-                    fontStyle: _isOtherUserTyping ? FontStyle.italic : FontStyle.normal,
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(widget.otherUser.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15)),
+                  Text(
+                    _isOtherUserTyping 
+                        ? 'Sedang mengetik...' 
+                        : (widget.otherUser.isOnline ? 'Online' : 'Offline'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _isOtherUserTyping
+                          ? RupiaColors.gold
+                          : (widget.otherUser.isOnline ? const Color(0xFF86EFAC) : Colors.white54),
+                      fontSize: 11,
+                      fontStyle: _isOtherUserTyping ? FontStyle.italic : FontStyle.normal,
+                    ),
                   ),
-                ),
-              ]),
+                ]),
+              ),
             ]),
             actions: [
               IconButton(
                 icon: const Icon(Icons.call, color: Colors.white, size: 22),
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => CallScreen(
-                      channelName: widget.roomId,
-                      otherUserName: widget.otherUser.name,
-                      isVideoCall: false,
-                    ),
-                  ));
+                onPressed: () async {
+                  // Beritahu pengguna lain agar masuk ke obrolan
+                  await widget.chatService.sendMessage(
+                    roomId: widget.roomId,
+                    senderId: widget.currentUid,
+                    text: '📞 Saya memulai Panggilan Suara. Ketuk ikon Telepon di atas untuk bergabung ke panggilan!',
+                  );
+                  if (mounted) {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => CallScreen(
+                        channelName: widget.roomId,
+                        otherUserName: widget.otherUser.name,
+                        isVideoCall: false,
+                      ),
+                    ));
+                  }
                 },
               ),
               IconButton(
                 icon: const Icon(Icons.videocam, color: Colors.white, size: 22),
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => CallScreen(
-                      channelName: widget.roomId,
-                      otherUserName: widget.otherUser.name,
-                      isVideoCall: true,
-                    ),
-                  ));
+                onPressed: () async {
+                  // Beritahu pengguna lain agar masuk ke obrolan
+                  await widget.chatService.sendMessage(
+                    roomId: widget.roomId,
+                    senderId: widget.currentUid,
+                    text: '📹 Saya memulai Panggilan Video. Ketuk ikon Video di atas untuk bergabung ke panggilan!',
+                  );
+                  if (mounted) {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => CallScreen(
+                        channelName: widget.roomId,
+                        otherUserName: widget.otherUser.name,
+                        isVideoCall: true,
+                      ),
+                    ));
+                  }
                 },
               ),
               TextButton.icon(
