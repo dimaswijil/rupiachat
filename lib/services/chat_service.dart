@@ -12,7 +12,7 @@ class ChatService {
   static final ChatService _instance = ChatService._internal();
   factory ChatService() => _instance;
 
-  static const _baseUrl = 'http://192.168.112.18:8000';
+  static const _baseUrl = 'http://192.168.1.5:8000';
 
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,

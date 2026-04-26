@@ -5,7 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthService {
   // Gunakan 10.0.2.2 untuk akses localhost dari Android Emulator
-  static const _baseUrl = 'http://192.168.112.18:8000';
+  static const _baseUrl = 'http://192.168.1.5:8000';
   
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,

@@ -12,7 +12,7 @@ class GroupService {
   static final GroupService _instance = GroupService._internal();
   factory GroupService() => _instance;
 
-  static const _baseUrl = 'http://192.168.112.18:8000';
+  static const _baseUrl = 'http://192.168.1.5:8000';
 
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
