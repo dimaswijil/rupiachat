@@ -3,6 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:dio/dio.dart';
+import '../config/api_config.dart';
+import '../services/auth_service.dart';
 import '../utils/colors.dart';
 
 // ── Ganti dengan App ID Agora Anda dari console.agora.io ──
@@ -11,12 +14,14 @@ const String agoraAppId = 'c10911c3802e494dbb69ac8fefb94d57';
 class CallScreen extends StatefulWidget {
   final String channelName;
   final String otherUserName;
+  final String otherUserId;
   final bool isVideoCall;
 
   const CallScreen({
     super.key,
     required this.channelName,
     required this.otherUserName,
+    required this.otherUserId,
     required this.isVideoCall,
   });
 
@@ -185,9 +190,30 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   void _endCall() async {
     _stopTimer();
+    // Simpan call log ke backend
+    _saveCallLog();
     await _engine.leaveChannel();
     await _engine.release();
     if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _saveCallLog() async {
+    try {
+      final token = await AuthService().currentToken;
+      if (token == null) return;
+      final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+      dio.options.headers['Authorization'] = 'Bearer $token';
+      dio.options.headers['Accept'] = 'application/json';
+      await dio.post('/api/call-logs', data: {
+        'receiver_id': widget.otherUserId,
+        'channel_name': widget.channelName,
+        'type': _isVideoMode ? 'video' : 'voice',
+        'status': _remoteUserJoined ? 'answered' : 'missed',
+        'duration': _seconds,
+      });
+    } catch (e) {
+      debugPrint('SaveCallLog Error: $e');
+    }
   }
 
   void _startHideControlsTimer() {

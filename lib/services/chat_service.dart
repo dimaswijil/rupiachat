@@ -233,10 +233,10 @@ class ChatService {
     } catch (e) { print('MarkAsRead Error: $e'); }
   }
 
-  Future<void> sendMessage({required String roomId, required String senderId, required String text}) async {
+  Future<void> sendMessage({required String roomId, required String senderId, required String text, String type = 'text'}) async {
     try {
       await _dio.post('/api/messages', data: {
-        'room_id': roomId, 'sender_id': senderId, 'text': text, 'type': 'text',
+        'room_id': roomId, 'sender_id': senderId, 'text': text, 'type': type,
       });
     } catch (e) { throw Exception('Gagal kirim pesan'); }
   }

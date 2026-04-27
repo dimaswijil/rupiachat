@@ -10,6 +10,8 @@ import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
 import 'dart:async';
 import 'call_screen.dart';
+import 'contact_info_screen.dart';
+import '../widgets/call_bubble.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final UserModel otherUser;
@@ -248,6 +250,26 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       }
     }
   }
+  void _startCall({required bool isVideo}) async {
+    final callType = isVideo ? 'video' : 'voice';
+    // Kirim pesan dengan format JSON agar bisa diparse jadi CallBubble
+    await widget.chatService.sendMessage(
+      roomId: widget.roomId,
+      senderId: widget.currentUid,
+      text: '{"call_type":"$callType","status":"missed","duration":0}',
+      type: 'call',
+    );
+    if (mounted) {
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => CallScreen(
+          channelName: widget.roomId,
+          otherUserName: widget.otherUser.name,
+          otherUserId: widget.otherUser.uid,
+          isVideoCall: isVideo,
+        ),
+      ));
+    }
+  }
 
   void _showPaymentSheet() {
     final amountCtrl = TextEditingController();
@@ -332,85 +354,68 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           child: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
+            leadingWidth: 30,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
+                onPressed: () => Navigator.pop(context),
+              ),
             ),
-            title: Row(children: [
-              AvatarWidget(
-                name: widget.otherUser.name, 
-                size: 36,
-                photoUrl: widget.otherUser.photoUrl,
-                interactive: true,
-                heroTag: 'avatar_appbar_${widget.otherUser.uid}',
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(widget.otherUser.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15)),
-                  Text(
-                    _isOtherUserTyping 
-                        ? 'Sedang mengetik...' 
-                        : (widget.otherUser.isOnline ? 'Online' : 'Offline'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: _isOtherUserTyping
-                          ? RupiaColors.gold
-                          : (widget.otherUser.isOnline ? const Color(0xFF86EFAC) : Colors.white54),
-                      fontSize: 11,
-                      fontStyle: _isOtherUserTyping ? FontStyle.italic : FontStyle.normal,
-                    ),
+            title: GestureDetector(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ContactInfoScreen(
+                    user: widget.otherUser,
+                    roomId: widget.roomId,
+                    currentUid: widget.currentUid,
                   ),
-                ]),
-              ),
-            ]),
+                ));
+              },
+              child: Row(children: [
+                AvatarWidget(
+                  name: widget.otherUser.name,
+                  size: 36,
+                  photoUrl: widget.otherUser.photoUrl,
+                  interactive: true,
+                  heroTag: 'avatar_appbar_${widget.otherUser.uid}',
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(widget.otherUser.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16)),
+                    Text(
+                      _isOtherUserTyping
+                          ? 'Sedang mengetik...'
+                          : (widget.otherUser.isOnline ? 'Online' : 'Offline'),
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: _isOtherUserTyping
+                            ? RupiaColors.gold
+                            : (widget.otherUser.isOnline ? const Color(0xFF86EFAC) : Colors.white54),
+                        fontSize: 12,
+                        fontStyle: _isOtherUserTyping ? FontStyle.italic : FontStyle.normal,
+                      ),
+                    ),
+                  ]),
+                ),
+              ]),
+            ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.call_rounded, color: Colors.white, size: 22),
-                onPressed: () async {
-                  await widget.chatService.sendMessage(
-                    roomId: widget.roomId,
-                    senderId: widget.currentUid,
-                    text: '📞 Saya memulai Panggilan Suara. Ketuk ikon Telepon di atas untuk bergabung ke panggilan!',
-                  );
-                  if (mounted) {
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => CallScreen(
-                        channelName: widget.roomId,
-                        otherUserName: widget.otherUser.name,
-                        isVideoCall: false,
-                      ),
-                    ));
-                  }
-                },
+                icon: const Icon(Icons.videocam_rounded, color: Colors.white, size: 24),
+                onPressed: () => _startCall(isVideo: true),
               ),
               IconButton(
-                icon: const Icon(Icons.videocam_rounded, color: Colors.white, size: 22),
-                onPressed: () async {
-                  await widget.chatService.sendMessage(
-                    roomId: widget.roomId,
-                    senderId: widget.currentUid,
-                    text: '📹 Saya memulai Panggilan Video. Ketuk ikon Video di atas untuk bergabung ke panggilan!',
-                  );
-                  if (mounted) {
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => CallScreen(
-                        channelName: widget.roomId,
-                        otherUserName: widget.otherUser.name,
-                        isVideoCall: true,
-                      ),
-                    ));
-                  }
-                },
+                icon: const Icon(Icons.call_rounded, color: Colors.white, size: 22),
+                onPressed: () => _startCall(isVideo: false),
               ),
-              const SizedBox(width: 4),
             ],
           ),
         ),
@@ -466,6 +471,31 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   amount: msg.amount ?? '',
                   senderName: widget.otherUser.name,
                   isMe: isMe,
+                  time: time,
+                );
+              } else if (msg.type == 'call' || msg.text.startsWith('📞') || msg.text.startsWith('📹')) {
+                // Parse call data
+                bool isVideo = false;
+                String callStatus = 'missed';
+                int callDuration = 0;
+                
+                if (msg.text.startsWith('{')) {
+                  try {
+                    final data = msg.text;
+                    isVideo = data.contains('"video"');
+                    if (data.contains('"answered"')) callStatus = 'answered';
+                    final durMatch = RegExp(r'"duration":(\d+)').firstMatch(data);
+                    if (durMatch != null) callDuration = int.tryParse(durMatch.group(1)!) ?? 0;
+                  } catch (_) {}
+                } else {
+                  isVideo = msg.text.startsWith('📹');
+                }
+                
+                bubble = CallBubble(
+                  isMe: isMe,
+                  isVideo: isVideo,
+                  status: callStatus,
+                  duration: callDuration,
                   time: time,
                 );
               } else {
