@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import '../config/api_config.dart';
 
 class AuthService {
-  // Gunakan 10.0.2.2 untuk akses localhost dari Android Emulator
-  static const _baseUrl = 'http://192.168.1.5:8000';
+  // Base URL diambil dari ApiConfig (satu tempat untuk semua service)
+  static const _baseUrl = ApiConfig.baseUrl;
   
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,

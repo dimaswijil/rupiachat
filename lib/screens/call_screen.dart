@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -23,7 +24,7 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   late RtcEngine _engine;
   bool _joined = false;
   bool _remoteUserJoined = false;
@@ -31,81 +32,95 @@ class _CallScreenState extends State<CallScreen> {
   bool _muted = false;
   bool _speakerOn = true;
   bool _cameraOff = false;
+  late bool _isVideoMode;
   Timer? _timer;
   int _seconds = 0;
+  bool _controlsVisible = true;
+  Timer? _hideControlsTimer;
+
+  // Animations
+  late AnimationController _pulseController;
+  late AnimationController _fadeController;
+  late Animation<double> _pulseAnimation;
+  late Animation<double> _fadeAnimation;
+
+  // PiP drag position
+  double _pipTop = 80;
+  double _pipRight = 16;
 
   @override
   void initState() {
     super.initState();
+    _isVideoMode = widget.isVideoCall;
+    _pulseController = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _fadeController = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 400),
+    );
+    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeController.forward();
+
     _initAgora();
   }
 
   Future<void> _initAgora() async {
-    // Request permissions
     await [Permission.microphone, Permission.camera].request();
 
-    // Create Agora engine
     if (agoraAppId == 'YOUR_AGORA_APP_ID' || agoraAppId.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⚠️ Anda belum memasukkan Agora APP ID di call_screen.dart (Baris 8)'),
+            content: Text('⚠️ Agora APP ID belum diisi'),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-          )
+          ),
         );
         Navigator.pop(context);
       }
       return;
     }
+
     _engine = createAgoraRtcEngine();
     await _engine.initialize(RtcEngineContext(
       appId: agoraAppId,
       channelProfile: ChannelProfileType.channelProfileCommunication,
     ));
 
-    // Register event handlers
     _engine.registerEventHandler(
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
-          setState(() => _joined = true);
-          debugPrint('Agora User Joined Channel Success: ${connection.channelId}');
+          if (mounted) setState(() => _joined = true);
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
-          setState(() {
-            _remoteUserJoined = true;
-            _remoteUid = remoteUid;
-          });
-          _startTimer();
-          debugPrint('Agora Remote User Joined: $remoteUid');
+          if (mounted) {
+            setState(() {
+              _remoteUserJoined = true;
+              _remoteUid = remoteUid;
+            });
+            _pulseController.stop();
+            _startTimer();
+            _startHideControlsTimer();
+          }
         },
         onUserOffline: (RtcConnection connection, int remoteUid, UserOfflineReasonType reason) {
-          setState(() {
-            _remoteUserJoined = false;
-            _remoteUid = null;
-          });
-          _stopTimer();
-          // Auto leave when other user disconnects
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) Navigator.pop(context);
-          });
-          debugPrint('Agora Remote User Offline: $remoteUid (Reason: $reason)');
+          if (mounted) {
+            setState(() { _remoteUserJoined = false; _remoteUid = null; });
+            _stopTimer();
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) Navigator.pop(context);
+            });
+          }
         },
         onError: (ErrorCodeType err, String msg) {
           debugPrint('Agora Error: $err - $msg');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Agora Error ($err): $msg\n(Note: Pastikan project di web Agora.io disetting "Testing Mode" / NO APP CERTIFICATE)'),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 5),
-              )
-            );
-          }
         },
-        onConnectionStateChanged: (RtcConnection connection, ConnectionStateType state, ConnectionChangedReasonType reason) {
-            debugPrint('Agora Connection State: $state, Reason: $reason');
-        }
+        onConnectionStateChanged: (RtcConnection c, ConnectionStateType s, ConnectionChangedReasonType r) {
+          debugPrint('Agora State: $s, Reason: $r');
+        },
       ),
     );
 
@@ -122,11 +137,8 @@ class _CallScreenState extends State<CallScreen> {
       scenario: AudioScenarioType.audioScenarioChatroom,
     );
 
-    // Join channel (token null = testing mode, no token needed for sandbox)
     await _engine.joinChannel(
-      token: '',
-      channelId: widget.channelName,
-      uid: 0,
+      token: '', channelId: widget.channelName, uid: 0,
       options: const ChannelMediaOptions(),
     );
   }
@@ -137,14 +149,12 @@ class _CallScreenState extends State<CallScreen> {
     });
   }
 
-  void _stopTimer() {
-    _timer?.cancel();
-  }
+  void _stopTimer() => _timer?.cancel();
 
-  String _formatDuration(int totalSeconds) {
-    final m = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-    final s = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+  String _formatDuration(int s) {
+    final m = (s ~/ 60).toString().padLeft(2, '0');
+    final sec = (s % 60).toString().padLeft(2, '0');
+    return '$m:$sec';
   }
 
   void _toggleMute() {
@@ -162,8 +172,15 @@ class _CallScreenState extends State<CallScreen> {
     _engine.muteLocalVideoStream(_cameraOff);
   }
 
-  void _switchCamera() {
-    _engine.switchCamera();
+  void _switchCamera() => _engine.switchCamera();
+
+  void _upgradeToVideo() async {
+    await _engine.enableVideo();
+    await _engine.startPreview();
+    setState(() {
+      _isVideoMode = true;
+      _cameraOff = false;
+    });
   }
 
   void _endCall() async {
@@ -173,245 +190,359 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _cleanupAgora() async {
-    try {
-      await _engine.leaveChannel();
-      await _engine.release();
-    } catch (e) {
-      debugPrint("Agora Teardown Error: $e");
+  void _startHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    if (_isVideoMode && _remoteUserJoined) {
+      _hideControlsTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _controlsVisible = false);
+      });
     }
+  }
+
+  void _toggleControls() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) _startHideControlsTimer();
   }
 
   @override
   void dispose() {
     _stopTimer();
-    _cleanupAgora();
+    _hideControlsTimer?.cancel();
+    _pulseController.dispose();
+    _fadeController.dispose();
+    try { _engine.leaveChannel(); _engine.release(); } catch (_) {}
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // ── Video / Audio Background ──
-            if (widget.isVideoCall) ...[
-              // Remote video (full screen)
-              if (_remoteUserJoined && _remoteUid != null)
-                AgoraVideoView(
-                  controller: VideoViewController.remote(
-                    rtcEngine: _engine,
-                    canvas: VideoCanvas(uid: _remoteUid!),
-                    connection: RtcConnection(channelId: widget.channelName),
-                  ),
-                )
-              else
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildAvatar(),
-                      const SizedBox(height: 16),
-                      Text(widget.otherUserName,
-                          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      Text(_joined ? 'Menunggu jawaban...' : 'Menghubungkan...',
-                          style: const TextStyle(color: Colors.white54, fontSize: 14)),
-                    ],
-                  ),
-                ),
-              // Local video (PiP - small preview)
-              if (_joined && !_cameraOff)
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SizedBox(
-                      width: 120,
-                      height: 160,
-                      child: AgoraVideoView(
-                        controller: VideoViewController(
-                          rtcEngine: _engine,
-                          canvas: const VideoCanvas(uid: 0),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ] else ...[
-              // Voice call UI
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildAvatar(),
-                    const SizedBox(height: 24),
-                    Text(widget.otherUserName,
-                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    if (_remoteUserJoined)
-                      Text(_formatDuration(_seconds),
-                          style: const TextStyle(color: RupiaColors.gold, fontSize: 18, fontWeight: FontWeight.w600))
-                    else
-                      Text(_joined ? 'Memanggil...' : 'Menghubungkan...',
-                          style: const TextStyle(color: Colors.white54, fontSize: 16)),
-                  ],
-                ),
-              ),
-            ],
-
-            // ── Top bar ──
-            Positioned(
-              top: 8,
-              left: 8,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                onPressed: _endCall,
-              ),
-            ),
-            if (_remoteUserJoined && widget.isVideoCall)
-              Positioned(
-                top: 8,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black38,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(_formatDuration(_seconds),
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ),
-
-            // ── Bottom controls ──
-            Positioned(
-              bottom: 40,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Mute
-                  _ControlButton(
-                    icon: _muted ? Icons.mic_off : Icons.mic,
-                    label: _muted ? 'Unmute' : 'Mute',
-                    isActive: _muted,
-                    onTap: _toggleMute,
-                  ),
-                  // Speaker (voice only)
-                  if (!widget.isVideoCall)
-                    _ControlButton(
-                      icon: _speakerOn ? Icons.volume_up : Icons.volume_off,
-                      label: 'Speaker',
-                      isActive: !_speakerOn,
-                      onTap: _toggleSpeaker,
-                    ),
-                  // Camera toggle (video only)
-                  if (widget.isVideoCall)
-                    _ControlButton(
-                      icon: _cameraOff ? Icons.videocam_off : Icons.videocam,
-                      label: 'Kamera',
-                      isActive: _cameraOff,
-                      onTap: _toggleCamera,
-                    ),
-                  // Flip camera (video only)
-                  if (widget.isVideoCall)
-                    _ControlButton(
-                      icon: Icons.cameraswitch,
-                      label: 'Putar',
-                      onTap: _switchCamera,
-                    ),
-                  // End call
-                  GestureDetector(
-                    onTap: _endCall,
-                    child: Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        color: Colors.redAccent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.call_end, color: Colors.white, size: 30),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+      backgroundColor: const Color(0xFF0A0E21),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: GestureDetector(
+          onTap: _isVideoMode ? _toggleControls : null,
+          child: Stack(children: [
+            // Background
+            _buildBackground(),
+            // Video views
+            if (_isVideoMode) ..._buildVideoViews(),
+            // Center content (voice call or waiting)
+            if (!_isVideoMode || !_remoteUserJoined) _buildCenterContent(),
+            // Top bar
+            if (_controlsVisible) _buildTopBar(),
+            // Bottom controls
+            if (_controlsVisible) _buildBottomControls(),
+          ]),
         ),
       ),
     );
   }
 
-  Widget _buildAvatar() {
-    final initials = widget.otherUserName
-        .trim()
-        .split(' ')
-        .take(2)
-        .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
-        .join();
+  Widget _buildBackground() {
+    if (_isVideoMode && _remoteUserJoined) return const SizedBox.shrink();
     return Container(
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A3C8F), Color(0xFF0D2060)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFF0A0E21), Color(0xFF1A1A3E), Color(0xFF0D2B6B)],
+          stops: [0.0, 0.5, 1.0],
         ),
-        border: Border.all(color: Colors.white24, width: 3),
       ),
+      child: CustomPaint(painter: _ParticlePainter(), size: Size.infinite),
+    );
+  }
+
+  List<Widget> _buildVideoViews() {
+    return [
+      // Remote video full screen
+      if (_remoteUserJoined && _remoteUid != null)
+        Positioned.fill(
+          child: AgoraVideoView(
+            controller: VideoViewController.remote(
+              rtcEngine: _engine,
+              canvas: VideoCanvas(uid: _remoteUid!),
+              connection: RtcConnection(channelId: widget.channelName),
+            ),
+          ),
+        ),
+      // Local PiP (draggable)
+      if (_joined && !_cameraOff)
+        Positioned(
+          top: _pipTop, right: _pipRight,
+          child: GestureDetector(
+            onPanUpdate: (d) {
+              setState(() {
+                _pipTop = (_pipTop + d.delta.dy).clamp(40, MediaQuery.of(context).size.height - 220);
+                _pipRight = (_pipRight - d.delta.dx).clamp(8, MediaQuery.of(context).size.width - 130);
+              });
+            },
+            child: Container(
+              width: 110, height: 150,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white30, width: 2),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 12)],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: AgoraVideoView(
+                  controller: VideoViewController(
+                    rtcEngine: _engine,
+                    canvas: const VideoCanvas(uid: 0),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  Widget _buildCenterContent() {
+    final initials = widget.otherUserName.trim().split(' ').take(2)
+        .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join();
+
+    return SafeArea(
       child: Center(
-        child: Text(initials,
-            style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w700)),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Animated avatar
+          AnimatedBuilder(
+            animation: _pulseAnimation,
+            builder: (_, child) {
+              final scale = _remoteUserJoined ? 1.0 : _pulseAnimation.value;
+              return Transform.scale(scale: scale, child: child);
+            },
+            child: Container(
+              width: 130, height: 130,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2557B3), Color(0xFF0D2060)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                border: Border.all(color: Colors.white.withOpacity(0.3), width: 3),
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFF2557B3).withOpacity(0.4), blurRadius: 30, spreadRadius: 5),
+                ],
+              ),
+              child: Center(child: Text(initials,
+                  style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w700))),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Name
+          Text(widget.otherUserName,
+              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+          const SizedBox(height: 10),
+          // Status
+          if (_remoteUserJoined)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(width: 8, height: 8,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4ADE80))),
+                const SizedBox(width: 8),
+                Text(_formatDuration(_seconds),
+                    style: const TextStyle(color: RupiaColors.gold, fontSize: 18, fontWeight: FontWeight.w600)),
+              ]),
+            )
+          else
+            _buildCallingStatus(),
+          const SizedBox(height: 8),
+          // Call type indicator
+          Text(
+            _isVideoMode ? '📹 Panggilan Video' : '📞 Panggilan Suara',
+            style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildCallingStatus() {
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: 0, end: 100),
+      duration: const Duration(seconds: 100),
+      builder: (_, val, __) {
+        final dots = '.' * ((val % 3) + 1);
+        final text = _joined ? 'Memanggil$dots' : 'Menghubungkan$dots';
+        return Text(text, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 16));
+      },
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Positioned(
+      top: 0, left: 0, right: 0,
+      child: AnimatedOpacity(
+        opacity: _controlsVisible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 8, left: 8, right: 16, bottom: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Colors.black.withOpacity(0.6), Colors.transparent],
+            ),
+          ),
+          child: Row(children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 22),
+              onPressed: _endCall,
+            ),
+            const Spacer(),
+            if (_remoteUserJoined)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 6, height: 6,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF4ADE80),
+                      boxShadow: [BoxShadow(color: const Color(0xFF4ADE80).withOpacity(0.5), blurRadius: 6)])),
+                  const SizedBox(width: 8),
+                  Text(_formatDuration(_seconds),
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomControls() {
+    return Positioned(
+      bottom: 0, left: 0, right: 0,
+      child: AnimatedOpacity(
+        opacity: _controlsVisible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 24, top: 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter, end: Alignment.topCenter,
+              colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+            ),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            _GlassButton(
+              icon: _muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+              label: _muted ? 'Unmute' : 'Mute',
+              isActive: _muted, onTap: _toggleMute,
+            ),
+            if (!_isVideoMode)
+              _GlassButton(
+                icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                label: 'Speaker',
+                isActive: !_speakerOn, onTap: _toggleSpeaker,
+              ),
+            // Switch to video (only during active voice call)
+            if (!_isVideoMode && _joined)
+              _GlassButton(
+                icon: Icons.videocam_rounded,
+                label: 'Video',
+                onTap: _upgradeToVideo,
+              ),
+            if (_isVideoMode)
+              _GlassButton(
+                icon: _cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+                label: 'Kamera',
+                isActive: _cameraOff, onTap: _toggleCamera,
+              ),
+            if (_isVideoMode)
+              _GlassButton(
+                icon: Icons.cameraswitch_rounded,
+                label: 'Putar', onTap: _switchCamera,
+              ),
+            // End call
+            GestureDetector(
+              onTap: _endCall,
+              child: Container(
+                width: 68, height: 68,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.5), blurRadius: 16, spreadRadius: 2),
+                  ],
+                ),
+                child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 32),
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }
 }
 
-class _ControlButton extends StatelessWidget {
+// ── Glassmorphism Button ──
+class _GlassButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _ControlButton({
-    required this.icon,
-    required this.label,
-    this.isActive = false,
-    required this.onTap,
+  const _GlassButton({
+    required this.icon, required this.label,
+    this.isActive = false, required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.15),
-              shape: BoxShape.circle,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isActive
+                ? Colors.white.withOpacity(0.95)
+                : Colors.white.withOpacity(0.12),
+            border: Border.all(
+              color: isActive ? Colors.white : Colors.white.withOpacity(0.2),
+              width: 1.5,
             ),
-            child: Icon(icon,
-                color: isActive ? Colors.black87 : Colors.white, size: 24),
+            boxShadow: isActive
+                ? [BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 12)]
+                : [],
           ),
-          const SizedBox(height: 6),
-          Text(label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11)),
-        ],
-      ),
+          child: Icon(icon,
+              color: isActive ? const Color(0xFF1A1A2E) : Colors.white, size: 26),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: TextStyle(
+          color: Colors.white.withOpacity(0.7), fontSize: 11, fontWeight: FontWeight.w500)),
+      ]),
     );
   }
+}
+
+// ── Subtle background particles ──
+class _ParticlePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withOpacity(0.03);
+    final rng = Random(42);
+    for (int i = 0; i < 30; i++) {
+      final x = rng.nextDouble() * size.width;
+      final y = rng.nextDouble() * size.height;
+      final r = rng.nextDouble() * 3 + 1;
+      canvas.drawCircle(Offset(x, y), r, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
 }

@@ -373,9 +373,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             ]),
             actions: [
               IconButton(
-                icon: const Icon(Icons.call, color: Colors.white, size: 22),
+                icon: const Icon(Icons.call_rounded, color: Colors.white, size: 22),
                 onPressed: () async {
-                  // Beritahu pengguna lain agar masuk ke obrolan
                   await widget.chatService.sendMessage(
                     roomId: widget.roomId,
                     senderId: widget.currentUid,
@@ -393,9 +392,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.videocam, color: Colors.white, size: 22),
+                icon: const Icon(Icons.videocam_rounded, color: Colors.white, size: 22),
                 onPressed: () async {
-                  // Beritahu pengguna lain agar masuk ke obrolan
                   await widget.chatService.sendMessage(
                     roomId: widget.roomId,
                     senderId: widget.currentUid,
@@ -412,15 +410,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   }
                 },
               ),
-              TextButton.icon(
-                onPressed: _showPaymentSheet,
-                icon: const Icon(Icons.send, color: RupiaColors.gold, size: 16),
-                label: const Text('Kirim Rp',
-                    style: TextStyle(
-                        color: RupiaColors.gold,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12)),
-              ),
+              const SizedBox(width: 4),
             ],
           ),
         ),
@@ -506,11 +496,56 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ),
         Container(
           color: isDarkMode ? RupiaColors.cardDark : Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           child: Row(children: [
-            IconButton(
-              icon: const Icon(Icons.image, color: RupiaColors.primary),
-              onPressed: _pickImage,
+            // Attachment button (paperclip) — Photo & Kirim Rp
+            PopupMenuButton<String>(
+              icon: Icon(Icons.attach_file_rounded,
+                  color: isDarkMode ? Colors.white70 : RupiaColors.textSecondary, size: 24),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              color: isDarkMode ? RupiaColors.cardDark : Colors.white,
+              elevation: 8,
+              offset: const Offset(0, -120),
+              onSelected: (value) {
+                if (value == 'photo') _pickImage();
+                if (value == 'payment') _showPaymentSheet();
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'photo',
+                  child: Row(children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: RupiaColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.image_rounded, color: RupiaColors.primary, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('Foto', style: TextStyle(
+                        color: isDarkMode ? Colors.white : RupiaColors.textPrimary,
+                        fontWeight: FontWeight.w500)),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'payment',
+                  child: Row(children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: RupiaColors.gold.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.monetization_on_rounded, color: RupiaColors.gold, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('Kirim Rp', style: TextStyle(
+                        color: isDarkMode ? Colors.white : RupiaColors.textPrimary,
+                        fontWeight: FontWeight.w500)),
+                  ]),
+                ),
+              ],
             ),
             Expanded(
               child: Container(
@@ -539,7 +574,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 height: 42,
                 decoration: const BoxDecoration(
                     color: RupiaColors.primary, shape: BoxShape.circle),
-                child: const Icon(Icons.send, color: Colors.white, size: 18),
+                child: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
               ),
             ),
           ]),
