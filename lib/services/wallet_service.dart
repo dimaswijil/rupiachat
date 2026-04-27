@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../main.dart';
+import '../config/api_config.dart';
 
 class WalletService {
   static final WalletService _instance = WalletService._internal();
   factory WalletService() => _instance;
 
-  static const _baseUrl = 'http://192.168.1.5:8000';
+  static const _baseUrl = ApiConfig.baseUrl;
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
     connectTimeout: const Duration(seconds: 15),

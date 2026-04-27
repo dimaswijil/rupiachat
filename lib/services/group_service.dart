@@ -6,13 +6,14 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 import '../models/group_model.dart';
+import '../config/api_config.dart';
 import '../main.dart';
 
 class GroupService {
   static final GroupService _instance = GroupService._internal();
   factory GroupService() => _instance;
 
-  static const _baseUrl = 'http://192.168.1.5:8000';
+  static const _baseUrl = ApiConfig.baseUrl;
 
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
