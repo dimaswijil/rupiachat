@@ -144,11 +144,12 @@ class GroupService {
   Future<void> sendMessage({
     required String groupId,
     required String text,
+    String type = 'text',
   }) async {
     try {
       await _dio.post('/api/groups/$groupId/messages', data: {
         'text': text,
-        'type': 'text',
+        'type': type,
       });
     } catch (e) {
       debugPrint('SendGroupMessage Error: $e');

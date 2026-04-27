@@ -190,10 +190,12 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   void _endCall() async {
     _stopTimer();
-    // Simpan call log ke backend
-    _saveCallLog();
-    await _engine.leaveChannel();
-    await _engine.release();
+    // Simpan call log ke backend (await agar selesai sebelum pop)
+    await _saveCallLog();
+    try {
+      await _engine.leaveChannel();
+      await _engine.release();
+    } catch (_) {}
     if (mounted) Navigator.pop(context);
   }
 

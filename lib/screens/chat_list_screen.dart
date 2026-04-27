@@ -98,11 +98,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final filteredUsers = _users.where((user) =>
           user.name.toLowerCase().contains(query.toLowerCase()) &&
           !user.isArchived).toList();
-      
-      final filteredGroups = _groups.where((group) =>
-          group.name.toLowerCase().contains(query.toLowerCase())).toList();
 
-      _mergedChats = [...filteredUsers, ...filteredGroups];
+      _mergedChats = [...filteredUsers];
       
       // URUTKAN WHATSAPP STYLE (PIN -> TERBARU)
       _mergedChats.sort((a, b) {
@@ -459,163 +456,89 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         style: const TextStyle(color: RupiaColors.primary, fontWeight: FontWeight.bold),
                       ),
                     ),
-                  // ── Grup Section ──────────────────────────────
+                  // ── Chat Pribadi ──────────────────────────────
                   ...List.generate(_mergedChats.length, (i) {
                     final item = _mergedChats[i];
-                    
-                    if (item is GroupModel) {
-                      final group = item;
-                      return Column(
-                        children: [
-                          Dismissible(
-                            key: Key('group_top_${group.id}'),
-                            direction: DismissDirection.horizontal,
-                            background: Container(
-                              color: Colors.grey.shade700,
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.only(left: 20),
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.more_horiz, color: Colors.white),
-                                  Text('Lainnya', style: TextStyle(color: Colors.white, fontSize: 10)),
-                                ],
-                              ),
-                            ),
-                            secondaryBackground: Container(
-                              color: RupiaColors.primary,
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.archive, color: Colors.white),
-                                  Text('Arsip', style: TextStyle(color: Colors.white, fontSize: 10)),
-                                ],
-                              ),
-                            ),
-                            confirmDismiss: (direction) async {
-                              if (direction == DismissDirection.startToEnd) {
-                                _showDeleteOptions(context, group, group.id, true);
-                                return false;
-                              }
-                              
-                              if (direction == DismissDirection.endToStart) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Fitur arsip grup belum tersedia')),
-                                );
-                                return false;
-                              }
-                              return true;
-                            },
-                            onDismissed: (direction) {},
-                            child: _GroupTile(
-                              group: group,
-                              isDarkMode: isDarkMode,
-                              onTap: () async {
-                                if (_isNavigating) return;
-                                _isNavigating = true;
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => GroupChatScreen(
-                                      groupId: group.id,
-                                      groupName: group.name,
-                                      groupPhoto: group.photo,
-                                      currentUid: _currentUid,
-                                    ),
-                                  ),
-                                );
-                                _isNavigating = false;
-                                _loadUsers();
-                              },
-                            ),
-                          ),
-                          Divider(indent: 72, height: 1, thickness: 0.5, color: isDarkMode ? Colors.white10 : Colors.black12),
-                        ],
-                      );
-                    } else {
-                      final user = item as UserModel;
-                      final roomId = _chat.getRoomId(_currentUid, user.uid);
+                    final user = item as UserModel;
+                    final roomId = _chat.getRoomId(_currentUid, user.uid);
 
-                      return Column(
-                        children: [
-                          Dismissible(
-                            key: Key('chat_$roomId'),
-                            direction: DismissDirection.horizontal,
-                            background: Container(
-                              color: Colors.grey.shade700,
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.only(left: 20),
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.more_horiz, color: Colors.white),
-                                  Text('Lainnya', style: TextStyle(color: Colors.white, fontSize: 10)),
-                                ],
-                              ),
+                    return Column(
+                      children: [
+                        Dismissible(
+                          key: Key('chat_$roomId'),
+                          direction: DismissDirection.horizontal,
+                          background: Container(
+                            color: Colors.grey.shade700,
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.only(left: 20),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.more_horiz, color: Colors.white),
+                                Text('Lainnya', style: TextStyle(color: Colors.white, fontSize: 10)),
+                              ],
                             ),
-                            secondaryBackground: Container(
-                              color: RupiaColors.primary,
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.archive, color: Colors.white),
-                                  Text('Arsip', style: TextStyle(color: Colors.white, fontSize: 10)),
-                                ],
-                              ),
+                          ),
+                          secondaryBackground: Container(
+                            color: RupiaColors.primary,
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.archive, color: Colors.white),
+                                Text('Arsip', style: TextStyle(color: Colors.white, fontSize: 10)),
+                              ],
                             ),
-                            confirmDismiss: (direction) async {
-                              if (direction == DismissDirection.startToEnd) {
-                                _showDeleteOptions(context, user, roomId, false);
-                                return false;
-                              }
-                              return true;
-                            },
-                            onDismissed: (direction) {
-                              if (direction == DismissDirection.endToStart) {
-                                _archiveChat(user, roomId);
-                              }
-                            },
-                            child: _UserTile(
-                              key: ValueKey(roomId),
-                              user: user,
-                              roomId: roomId,
-                              currentUid: _currentUid,
-                              chat: _chat,
-                              onTap: () async {
-                                if (_isNavigating) return;
-                                _isNavigating = true;
-                                await _chat.markAsRead(roomId);
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ChatRoomScreen(
-                                      otherUser: user,
-                                      roomId: roomId,
-                                      currentUid: _currentUid,
-                                      chatService: _chat,
-                                    ),
+                          ),
+                          confirmDismiss: (direction) async {
+                            if (direction == DismissDirection.startToEnd) {
+                              _showDeleteOptions(context, user, roomId, false);
+                              return false;
+                            }
+                            return true;
+                          },
+                          onDismissed: (direction) {
+                            if (direction == DismissDirection.endToStart) {
+                              _archiveChat(user, roomId);
+                            }
+                          },
+                          child: _UserTile(
+                            key: ValueKey(roomId),
+                            user: user,
+                            roomId: roomId,
+                            currentUid: _currentUid,
+                            chat: _chat,
+                            onTap: () async {
+                              if (_isNavigating) return;
+                              _isNavigating = true;
+                              await _chat.markAsRead(roomId);
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatRoomScreen(
+                                    otherUser: user,
+                                    roomId: roomId,
+                                    currentUid: _currentUid,
+                                    chatService: _chat,
                                   ),
-                                );
-                                _isNavigating = false;
-                                _loadUsers();
-                              },
-                              onLongPress: () => _showDeleteOptions(context, user, roomId, false),
-                              onNewMessage: _onNewMessageReceived,
-                            ),
+                                ),
+                              );
+                              _isNavigating = false;
+                              _loadUsers();
+                            },
+                            onLongPress: () => _showDeleteOptions(context, user, roomId, false),
+                            onNewMessage: _onNewMessageReceived,
                           ),
-                          Divider(
-                            indent: 72, 
-                            height: 1, 
-                            thickness: 0.5, 
-                            color: isDarkMode ? Colors.white10 : Colors.black12,
-                          ),
-                        ],
-                      );
-                    }
+                        ),
+                        Divider(
+                          indent: 72, 
+                          height: 1, 
+                          thickness: 0.5, 
+                          color: isDarkMode ? Colors.white10 : Colors.black12,
+                        ),
+                      ],
+                    );
                   }),
                 ],
               ),
@@ -662,7 +585,16 @@ class _UserTileState extends State<_UserTile> {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    final _lastMessage = widget.user.lastMessage ?? 'Mulai percakapan...';
+    String rawMsg = widget.user.lastMessage ?? 'Mulai percakapan...';
+    // Format pesan call agar tidak tampil JSON mentah
+    if (rawMsg.startsWith('{') && rawMsg.contains('call_type')) {
+      if (rawMsg.contains('"video"')) {
+        rawMsg = '📹 Panggilan Video';
+      } else {
+        rawMsg = '📞 Panggilan Suara';
+      }
+    }
+    final _lastMessage = rawMsg;
     final _unreadCount = widget.user.unreadCount ?? 0;
     final _time = _formatTimeFromDate(widget.user.lastMessageTime);
 
