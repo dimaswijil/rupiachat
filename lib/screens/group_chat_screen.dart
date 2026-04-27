@@ -8,6 +8,8 @@ import '../services/group_service.dart';
 import '../models/group_model.dart';
 import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
+import 'group_call_screen.dart';
+import '../widgets/call_bubble.dart';
 
 /// Chat room untuk grup — mirip dengan ChatRoomScreen tapi untuk grup
 class GroupChatScreen extends StatefulWidget {
@@ -258,6 +260,16 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               ]),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.videocam_rounded, color: Colors.white, size: 24),
+                tooltip: 'Video Call Grup',
+                onPressed: () => _startGroupCall(isVideo: true),
+              ),
+              IconButton(
+                icon: const Icon(Icons.call_rounded, color: Colors.white, size: 22),
+                tooltip: 'Voice Call Grup',
+                onPressed: () => _startGroupCall(isVideo: false),
+              ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
                 onSelected: (val) {
@@ -270,8 +282,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       value: 'info',
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, 
-                              size: 20, 
+                          Icon(Icons.info_outline,
+                              size: 20,
                               color: isDark ? Colors.white70 : Colors.black87),
                           const SizedBox(width: 10),
                           const Text('Info Grup'),
@@ -354,6 +366,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             (i == _messages.length - 1 ||
                                 _messages[i + 1].senderId != msg.senderId);
 
+                        final isCallMsg = msg.type == 'call' || msg.text.startsWith('📞') || msg.text.startsWith('📹') ||
+                            (msg.text.startsWith('{') && msg.text.contains('call_type'));
+
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -362,16 +377,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 label: _dateLabel(msgDate),
                                 isDarkMode: isDarkMode,
                               ),
-                            _GroupMessageBubble(
-                              text: msg.text,
-                              isMe: isMe,
-                              time: time,
-                              senderName:
-                                  showSenderName ? msg.senderName : null,
-                              senderPhoto: msg.senderPhoto,
-                              type: msg.type,
-                              isDarkMode: isDarkMode,
-                            ),
+                            if (isCallMsg)
+                              _buildGroupCallBubble(msg, isMe, time, showSenderName ? msg.senderName : null, isDarkMode)
+                            else
+                              _GroupMessageBubble(
+                                text: msg.text,
+                                isMe: isMe,
+                                time: time,
+                                senderName:
+                                    showSenderName ? msg.senderName : null,
+                                senderPhoto: msg.senderPhoto,
+                                type: msg.type,
+                                isDarkMode: isDarkMode,
+                              ),
                           ],
                         );
                       },
@@ -428,6 +446,77 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         ),
       ]),
     );
+  }
+
+  void _startGroupCall({required bool isVideo}) async {
+    final callType = isVideo ? 'video' : 'voice';
+    // Kirim pesan call ke grup
+    try {
+      await _groupService.sendMessage(
+        groupId: widget.groupId,
+        text: '{"call_type":"$callType","status":"missed","duration":0}',
+        type: 'call',
+      );
+    } catch (_) {}
+    if (mounted) {
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => GroupCallScreen(
+          channelName: widget.groupId,
+          groupName: _groupName,
+          isVideoCall: isVideo,
+        ),
+      ));
+    }
+  }
+
+  Widget _buildGroupCallBubble(GroupMessageModel msg, bool isMe, String time, String? senderName, bool isDarkMode) {
+    bool isVideo = false;
+    String callStatus = 'missed';
+    int callDuration = 0;
+
+    if (msg.text.startsWith('{')) {
+      try {
+        isVideo = msg.text.contains('"video"');
+        if (msg.text.contains('"answered"')) callStatus = 'answered';
+        final durMatch = RegExp(r'"duration":(\d+)').firstMatch(msg.text);
+        if (durMatch != null) callDuration = int.tryParse(durMatch.group(1)!) ?? 0;
+      } catch (_) {}
+    } else {
+      isVideo = msg.text.startsWith('📹');
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 4, left: isMe ? 48 : 0, right: isMe ? 0 : 48),
+      child: Column(
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          if (senderName != null && !isMe)
+            Padding(
+              padding: const EdgeInsets.only(left: 36, bottom: 2),
+              child: Text(senderName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _senderColor(senderName))),
+            ),
+          CallBubble(
+            isMe: isMe,
+            isVideo: isVideo,
+            status: callStatus,
+            duration: callDuration,
+            time: time,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _senderColor(String name) {
+    const colors = [
+      Color(0xFF25D366), Color(0xFF34B7F1), Color(0xFFFF6B6B),
+      Color(0xFFFFA726), Color(0xFFAB47BC), Color(0xFF26A69A),
+    ];
+    int hash = 0;
+    for (int i = 0; i < name.length; i++) {
+      hash = name.codeUnitAt(i) + ((hash << 5) - hash);
+    }
+    return colors[hash.abs() % colors.length];
   }
 }
 
