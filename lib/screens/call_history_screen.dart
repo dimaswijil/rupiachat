@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import '../config/api_config.dart';
 import '../services/auth_service.dart';
-import '../services/chat_service.dart';
 import '../models/user_model.dart';
 import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
@@ -11,8 +10,6 @@ import 'contact_info_screen.dart';
 import 'group_info_screen.dart';
 import 'call_screen.dart';
 import 'group_call_screen.dart';
-import 'chat_room_screen.dart';
-import 'group_chat_screen.dart';
 
 class CallHistoryScreen extends StatefulWidget {
   const CallHistoryScreen({super.key});
