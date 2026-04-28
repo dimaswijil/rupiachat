@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
 import '../config/api_config.dart';
 import '../services/auth_service.dart';
+import '../services/chat_service.dart';
 import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
-import 'contacts_screen.dart';
 
 class GroupInfoScreen extends StatefulWidget {
   final String groupId;
   final String currentUid;
+  final bool showCallHistory;
 
-  const GroupInfoScreen({super.key, required this.groupId, required this.currentUid});
+  const GroupInfoScreen({super.key, required this.groupId, required this.currentUid, this.showCallHistory = false});
 
   @override
   State<GroupInfoScreen> createState() => _GroupInfoScreenState();
@@ -19,8 +21,10 @@ class GroupInfoScreen extends StatefulWidget {
 class _GroupInfoScreenState extends State<GroupInfoScreen> {
   Map<String, dynamic>? _group;
   List<Map<String, dynamic>> _members = [];
+  List<Map<String, dynamic>> _callLogs = [];
   String _myRole = 'member';
   bool _loading = true;
+  bool _loadingCalls = true;
 
   bool get _isAdmin => _myRole == 'admin';
 
@@ -28,6 +32,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   void initState() {
     super.initState();
     _loadGroupInfo();
+    if (widget.showCallHistory) _loadGroupCallLogs();
+    else _loadingCalls = false;
   }
 
   Dio _authedDio(String token) {
@@ -61,6 +67,172 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       debugPrint('LoadGroupInfo Error: $e');
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadGroupCallLogs() async {
+    try {
+      final token = await AuthService().currentToken;
+      if (token == null) { if (mounted) setState(() => _loadingCalls = false); return; }
+      final res = await _authedDio(token).get('/api/call-logs');
+      final rawData = res.data;
+      List<Map<String, dynamic>> allCalls = [];
+      if (rawData is Map && rawData.containsKey('data')) {
+        for (var item in (rawData['data'] as List)) {
+          if (item is Map) allCalls.add(Map<String, dynamic>.from(item));
+        }
+      }
+      final groupCalls = allCalls.where((c) => c['group_id']?.toString() == widget.groupId).toList();
+      if (mounted) setState(() { _callLogs = groupCalls; _loadingCalls = false; });
+    } catch (e) {
+      debugPrint('LoadGroupCallLogs Error: $e');
+      if (mounted) setState(() => _loadingCalls = false);
+    }
+  }
+
+  List<Widget> _buildCallLogSections(bool isDark, Color textColor, Color subtextColor) {
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (var call in _callLogs) {
+      final createdAt = DateTime.tryParse(call['created_at']?.toString() ?? '') ?? DateTime.now();
+      final localDate = createdAt.toLocal();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final msgDay = DateTime(localDate.year, localDate.month, localDate.day);
+      String dateLabel;
+      if (msgDay == today) { dateLabel = 'Hari Ini'; }
+      else if (msgDay == today.subtract(const Duration(days: 1))) { dateLabel = 'Kemarin'; }
+      else { dateLabel = DateFormat('dd MMM yyyy').format(localDate); }
+      grouped.putIfAbsent(dateLabel, () => []);
+      grouped[dateLabel]!.add(call);
+    }
+
+    List<Widget> widgets = [];
+    grouped.forEach((dateLabel, calls) {
+      widgets.add(Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: widgets.isEmpty ? 16 : 12, bottom: 8),
+        child: Text(dateLabel, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textColor)),
+      ));
+      for (var call in calls) {
+        final type = call['type']?.toString() ?? 'voice';
+        final status = call['status']?.toString() ?? 'missed';
+        final duration = int.tryParse(call['duration']?.toString() ?? '0') ?? 0;
+        final isMissed = status == 'missed';
+        final isVideo = type == 'video';
+        final createdAt = DateTime.tryParse(call['created_at']?.toString() ?? '') ?? DateTime.now();
+        final timeStr = DateFormat('HH:mm').format(createdAt.toLocal());
+        final callDesc = isMissed
+            ? (isVideo ? 'Panggilan video tidak dijawab' : 'Panggilan suara tidak dijawab')
+            : (isVideo ? 'Panggilan video grup' : 'Panggilan suara grup');
+        String durationStr = '';
+        if (status == 'answered' && duration > 0) {
+          final m = duration ~/ 60; final s = duration % 60;
+          durationStr = m > 0 ? '$m menit, $s detik' : '$s detik';
+        }
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(width: 44, child: Text(timeStr, style: TextStyle(fontSize: 13, color: subtextColor))),
+            Icon(isVideo ? Icons.videocam_rounded : Icons.call_rounded, size: 16,
+                color: isMissed ? const Color(0xFFEF4444) : RupiaColors.primary),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(callDesc, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500,
+                  color: isMissed ? const Color(0xFFEF4444) : textColor)),
+              if (durationStr.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 2),
+                    child: Text(durationStr, style: TextStyle(fontSize: 12, color: subtextColor))),
+            ])),
+          ]),
+        ));
+      }
+    });
+    widgets.add(const SizedBox(height: 12));
+    return widgets;
+  }
+
+  void _showAddMemberSheet() async {
+    final token = await AuthService().currentToken;
+    if (token == null) return;
+    final uid = await AuthService().currentUid ?? '';
+    final chatService = ChatService();
+    chatService.setToken(token);
+    final allUsers = await chatService.getUsers(uid);
+    
+    // Filter out existing members
+    final existingIds = _members.map((m) => m['id']?.toString()).toSet();
+    final available = allUsers.where((u) => !existingIds.contains(u.uid)).toList();
+
+    if (!mounted) return;
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Semua kontak sudah menjadi anggota')));
+      return;
+    }
+
+    final selected = <String>{};
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return StatefulBuilder(builder: (ctx, setSheetState) {
+          return Container(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            decoration: BoxDecoration(
+              color: isDark ? RupiaColors.cardDark : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(children: [
+              Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 12),
+                  decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(2))),
+              Padding(padding: const EdgeInsets.all(16),
+                child: Row(children: [
+                  const Expanded(child: Text('Tambah Anggota', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
+                  if (selected.isNotEmpty)
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: RupiaColors.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          await _authedDio(token).post('/api/groups/${widget.groupId}/members',
+                              data: {'member_ids': selected.toList()});
+                          _loadGroupInfo();
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${selected.length} anggota ditambahkan')));
+                        } catch (e) {
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Gagal menambah anggota')));
+                        }
+                      },
+                      child: Text('Tambah (${selected.length})', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    ),
+                ])),
+              Expanded(child: ListView.builder(
+                itemCount: available.length,
+                itemBuilder: (_, i) {
+                  final u = available[i];
+                  final isSelected = selected.contains(u.uid);
+                  return ListTile(
+                    leading: AvatarWidget(name: u.name, size: 40, photoUrl: u.photoUrl, interactive: false),
+                    title: Text(u.name),
+                    subtitle: Text(u.phone ?? u.email, style: TextStyle(fontSize: 12,
+                        color: isDark ? Colors.white38 : RupiaColors.textSecondary)),
+                    trailing: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined,
+                        color: isSelected ? RupiaColors.primary : Colors.grey),
+                    onTap: () {
+                      setSheetState(() {
+                        if (isSelected) { selected.remove(u.uid); } else { selected.add(u.uid); }
+                      });
+                    },
+                  );
+                },
+              )),
+            ]),
+          );
+        });
+      },
+    );
   }
 
   Future<void> _removeMember(String userId, String name) async {
@@ -277,6 +449,29 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           ),
         )),
 
+        // Call History (only from call history screen)
+        if (widget.showCallHistory)
+          SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Container(
+              decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(16),
+                boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+              child: _loadingCalls
+                  ? const Padding(padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator(color: RupiaColors.primary, strokeWidth: 2)))
+                  : _callLogs.isEmpty
+                      ? Padding(padding: const EdgeInsets.all(20),
+                          child: Row(children: [
+                            Container(width: 36, height: 36,
+                              decoration: BoxDecoration(shape: BoxShape.circle, color: RupiaColors.primary.withOpacity(0.1)),
+                              child: const Icon(Icons.call_rounded, color: RupiaColors.primary, size: 18)),
+                            const SizedBox(width: 14),
+                            Text('Belum ada riwayat panggilan', style: TextStyle(fontSize: 14, color: subtextColor)),
+                          ]))
+                      : Column(crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _buildCallLogSections(isDark, textColor, subtextColor)),
+            ),
+          )),
+
         // Members Header + Add button
         SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
           child: Row(children: [
@@ -286,23 +481,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             const Spacer(),
             if (_isAdmin)
               GestureDetector(
-                onTap: () async {
-                  // Navigate to contacts screen to pick users
-                  final result = await Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => const ContactsScreen(selectMode: true)));
-                  if (result != null && result is List) {
-                    final token = await AuthService().currentToken;
-                    if (token == null) return;
-                    try {
-                      await _authedDio(token).post('/api/groups/${widget.groupId}/members',
-                        data: {'member_ids': result});
-                      _loadGroupInfo();
-                    } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Gagal menambah anggota')));
-                    }
-                  }
-                },
+              onTap: () => _showAddMemberSheet(),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: RupiaColors.primary, borderRadius: BorderRadius.circular(20)),

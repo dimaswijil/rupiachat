@@ -42,6 +42,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   int _seconds = 0;
   bool _controlsVisible = true;
   Timer? _hideControlsTimer;
+  bool _isEnding = false;
 
   // Animations
   late AnimationController _pulseController;
@@ -189,8 +190,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 
   void _endCall() async {
+    if (_isEnding) return;
+    _isEnding = true;
     _stopTimer();
-    // Simpan call log ke backend (await agar selesai sebelum pop)
     await _saveCallLog();
     try {
       await _engine.leaveChannel();
@@ -440,6 +442,19 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                       style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
                 ]),
               ),
+            const SizedBox(width: 8),
+            if (!_isVideoMode)
+              IconButton(
+                icon: const Icon(Icons.videocam_rounded, color: Colors.white70, size: 26),
+                tooltip: 'Upgrade ke Video',
+                onPressed: _upgradeToVideo,
+              ),
+            if (_isVideoMode)
+              IconButton(
+                icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white70, size: 24),
+                tooltip: 'Putar Kamera',
+                onPressed: _switchCamera,
+              ),
           ]),
         ),
       ),
@@ -452,62 +467,63 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       child: AnimatedOpacity(
         opacity: _controlsVisible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 300),
-        child: Container(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 24, top: 20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter, end: Alignment.topCenter,
-              colors: [Colors.black.withOpacity(0.7), Colors.transparent],
-            ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).padding.bottom + 20,
+            left: 20, right: 20, top: 16,
           ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _GlassButton(
-              icon: _muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-              label: _muted ? 'Unmute' : 'Mute',
-              isActive: _muted, onTap: _toggleMute,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
             ),
-            if (!_isVideoMode)
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
               _GlassButton(
-                icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                label: 'Speaker',
-                isActive: !_speakerOn, onTap: _toggleSpeaker,
+                icon: _muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                label: _muted ? 'Unmute' : 'Mute',
+                isActive: _muted, onTap: _toggleMute,
               ),
-            // Switch to video (only during active voice call)
-            if (!_isVideoMode && _joined)
-              _GlassButton(
-                icon: Icons.videocam_rounded,
-                label: 'Video',
-                onTap: _upgradeToVideo,
-              ),
-            if (_isVideoMode)
-              _GlassButton(
-                icon: _cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
-                label: 'Kamera',
-                isActive: _cameraOff, onTap: _toggleCamera,
-              ),
-            if (_isVideoMode)
-              _GlassButton(
-                icon: Icons.cameraswitch_rounded,
-                label: 'Putar', onTap: _switchCamera,
-              ),
-            // End call
-            GestureDetector(
-              onTap: _endCall,
-              child: Container(
-                width: 68, height: 68,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.5), blurRadius: 16, spreadRadius: 2),
-                  ],
+              if (_isVideoMode)
+                _GlassButton(
+                  icon: _cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+                  label: _cameraOff ? 'Kamera On' : 'Kamera Off',
+                  isActive: _cameraOff, onTap: _toggleCamera,
                 ),
-                child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 32),
+              if (!_isVideoMode)
+                _GlassButton(
+                  icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  label: _speakerOn ? 'Speaker' : 'Earpiece',
+                  isActive: !_speakerOn, onTap: _toggleSpeaker,
+                ),
+              if (!_isVideoMode && _joined)
+                _GlassButton(
+                  icon: Icons.videocam_rounded,
+                  label: 'Video',
+                  onTap: _upgradeToVideo,
+                ),
+              if (_isVideoMode)
+                _GlassButton(
+                  icon: Icons.cameraswitch_rounded,
+                  label: 'Putar', onTap: _switchCamera,
+                ),
+              // End call
+              GestureDetector(
+                onTap: _endCall,
+                child: Container(
+                  width: 56, height: 56,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                    ),
+                  ),
+                  child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 28),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         ),
       ),
     );
@@ -532,26 +548,20 @@ class _GlassButton extends StatelessWidget {
       onTap: onTap,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 56, height: 56,
+          width: 48, height: 48,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isActive
-                ? Colors.white.withOpacity(0.95)
-                : Colors.white.withOpacity(0.12),
-            border: Border.all(
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.2),
-              width: 1.5,
-            ),
-            boxShadow: isActive
-                ? [BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 12)]
-                : [],
+                ? Colors.white.withOpacity(0.2)
+                : Colors.white.withOpacity(0.08),
+            border: Border.all(color: Colors.white.withOpacity(0.15)),
           ),
           child: Icon(icon,
-              color: isActive ? const Color(0xFF1A1A2E) : Colors.white, size: 26),
+              color: isActive ? const Color(0xFFEF4444) : Colors.white, size: 22),
         ),
-        const SizedBox(height: 8),
-        Text(label, style: TextStyle(
-          color: Colors.white.withOpacity(0.7), fontSize: 11, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(
+          color: Colors.white60, fontSize: 10)),
       ]),
     );
   }
