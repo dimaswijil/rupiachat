@@ -52,7 +52,7 @@ void main() async {
         badge: true,
         sound: true,
       );
-    }).catchError((e) => print('FCM Permission Error: $e'));
+    }).catchError((e) { debugPrint('FCM Permission Error: $e'); return null; });
 
     // 6. Listen token refresh → update ke server
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {

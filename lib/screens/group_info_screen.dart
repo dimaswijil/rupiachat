@@ -6,6 +6,8 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
+import 'group_call_screen.dart';
+import 'group_chat_screen.dart';
 
 class GroupInfoScreen extends StatefulWidget {
   final String groupId;
@@ -73,20 +75,46 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     try {
       final token = await AuthService().currentToken;
       if (token == null) { if (mounted) setState(() => _loadingCalls = false); return; }
-      final res = await _authedDio(token).get('/api/call-logs');
+
+      final res = await _authedDio(token).get('/api/call-logs/group/${widget.groupId}');
       final rawData = res.data;
-      List<Map<String, dynamic>> allCalls = [];
+      List<Map<String, dynamic>> calls = [];
       if (rawData is Map && rawData.containsKey('data')) {
         for (var item in (rawData['data'] as List)) {
-          if (item is Map) allCalls.add(Map<String, dynamic>.from(item));
+          if (item is Map) calls.add(Map<String, dynamic>.from(item));
         }
       }
-      final groupCalls = allCalls.where((c) => c['group_id']?.toString() == widget.groupId).toList();
-      if (mounted) setState(() { _callLogs = groupCalls; _loadingCalls = false; });
+      if (mounted) setState(() { _callLogs = calls; _loadingCalls = false; });
     } catch (e) {
       debugPrint('LoadGroupCallLogs Error: $e');
       if (mounted) setState(() => _loadingCalls = false);
     }
+  }
+
+  void _startGroupCall({required bool isVideo}) {
+    if (!mounted) return;
+    final groupName = _group?['name'] ?? 'Grup';
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => GroupCallScreen(
+        channelName: widget.groupId,
+        groupName: groupName,
+        isVideoCall: isVideo,
+      ),
+    ));
+  }
+
+  void _goToGroupChat() async {
+    if (!mounted) return;
+    final groupName = _group?['name'] ?? 'Grup';
+    final groupPhoto = _group?['photo']?.toString();
+    Navigator.pushReplacement(context, MaterialPageRoute(
+      builder: (_) => GroupChatScreen(
+        groupId: widget.groupId,
+        groupName: groupName,
+        groupPhoto: groupPhoto,
+        currentUid: widget.currentUid,
+      ),
+    ));
   }
 
   List<Widget> _buildCallLogSections(bool isDark, Color textColor, Color subtextColor) {
@@ -117,31 +145,50 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         final duration = int.tryParse(call['duration']?.toString() ?? '0') ?? 0;
         final isMissed = status == 'missed';
         final isVideo = type == 'video';
+        final isOutgoing = call['is_outgoing'] == true;
+        final callerName = call['caller_name']?.toString() ?? 'Unknown';
         final createdAt = DateTime.tryParse(call['created_at']?.toString() ?? '') ?? DateTime.now();
         final timeStr = DateFormat('HH:mm').format(createdAt.toLocal());
-        final callDesc = isMissed
-            ? (isVideo ? 'Panggilan video tidak dijawab' : 'Panggilan suara tidak dijawab')
-            : (isVideo ? 'Panggilan video grup' : 'Panggilan suara grup');
+        String callDesc;
+        if (isMissed) {
+          callDesc = isVideo ? 'Panggilan video tidak dijawab' : 'Panggilan suara tidak dijawab';
+        } else {
+          callDesc = isVideo ? 'Panggilan video grup' : 'Panggilan suara grup';
+        }
         String durationStr = '';
         if (status == 'answered' && duration > 0) {
           final m = duration ~/ 60; final s = duration % 60;
           durationStr = m > 0 ? '$m menit, $s detik' : '$s detik';
         }
-        widgets.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(width: 44, child: Text(timeStr, style: TextStyle(fontSize: 13, color: subtextColor))),
-            Icon(isVideo ? Icons.videocam_rounded : Icons.call_rounded, size: 16,
-                color: isMissed ? const Color(0xFFEF4444) : RupiaColors.primary),
-            const SizedBox(width: 8),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(callDesc, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500,
-                  color: isMissed ? const Color(0xFFEF4444) : textColor)),
-              if (durationStr.isNotEmpty)
+        widgets.add(InkWell(
+          onTap: () => _startGroupCall(isVideo: isVideo),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 44, child: Text(timeStr, style: TextStyle(fontSize: 13, color: subtextColor))),
+              Icon(isVideo ? Icons.videocam_rounded : Icons.call_rounded, size: 16,
+                  color: isMissed ? const Color(0xFFEF4444) : RupiaColors.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(callDesc, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500,
+                    color: isMissed ? const Color(0xFFEF4444) : textColor)),
                 Padding(padding: const EdgeInsets.only(top: 2),
-                    child: Text(durationStr, style: TextStyle(fontSize: 12, color: subtextColor))),
-            ])),
-          ]),
+                    child: Text(
+                      isOutgoing ? 'Oleh: Anda' : 'Oleh: $callerName',
+                      style: TextStyle(fontSize: 12, color: subtextColor),
+                    )),
+                if (durationStr.isNotEmpty)
+                  Padding(padding: const EdgeInsets.only(top: 2),
+                      child: Text(durationStr, style: TextStyle(fontSize: 12, color: subtextColor))),
+              ])),
+              GestureDetector(
+                onTap: () => _startGroupCall(isVideo: isVideo),
+                child: Container(width: 32, height: 32,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: RupiaColors.primary.withOpacity(0.1)),
+                  child: Icon(isVideo ? Icons.videocam_rounded : Icons.call_rounded, size: 16, color: RupiaColors.primary)),
+              ),
+            ]),
+          ),
         ));
       }
     });
@@ -376,7 +423,6 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final groupName = _group?['name'] ?? 'Grup';
     final description = _group?['description']?.toString() ?? '';
     final photo = _group?['photo']?.toString();
-    final createdAt = _group?['created_at']?.toString() ?? '';
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -419,13 +465,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         // Quick Actions
         SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
           child: Row(children: [
-            _actionBtn(Icons.chat_bubble_rounded, 'Pesan', () => Navigator.pop(context), isDark),
+            _actionBtn(Icons.chat_bubble_rounded, 'Pesan', _goToGroupChat, isDark),
             const SizedBox(width: 10),
-            _actionBtn(Icons.call_rounded, 'Telepon', () {}, isDark),
+            _actionBtn(Icons.call_rounded, 'Telepon', () => _startGroupCall(isVideo: false), isDark),
             const SizedBox(width: 10),
-            _actionBtn(Icons.videocam_rounded, 'Video', () {}, isDark),
+            _actionBtn(Icons.videocam_rounded, 'Video', () => _startGroupCall(isVideo: true), isDark),
             const SizedBox(width: 10),
-            _actionBtn(Icons.search_rounded, 'Cari', () {}, isDark),
+            _actionBtn(Icons.search_rounded, 'Cari', _goToGroupChat, isDark),
           ]),
         )),
 
