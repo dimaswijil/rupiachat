@@ -123,6 +123,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           channelName: channelName,
           otherUserName: widget.user.name,
           otherUserId: widget.user.uid,
+          otherUserPhoto: widget.user.photoUrl,
           isVideoCall: false,
         ),
       ));
@@ -139,6 +140,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           channelName: channelName,
           otherUserName: widget.user.name,
           otherUserId: widget.user.uid,
+          otherUserPhoto: widget.user.photoUrl,
           isVideoCall: true,
         ),
       ));
@@ -608,6 +610,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           channelName: channelName,
           otherUserName: widget.user.name,
           otherUserId: widget.user.uid,
+          otherUserPhoto: widget.user.photoUrl,
           isVideoCall: isVideo,
         ),
       ));

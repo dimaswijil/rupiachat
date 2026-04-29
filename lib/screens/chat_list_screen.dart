@@ -210,6 +210,23 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     _archiveChat(user, roomId);
                   },
                 ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.red,
+                  ),
+                  title: const Text(
+                    'Hapus Chat',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmDeleteChat(context, roomId, false);
+                  },
+                ),
               ],
             ),
           ),
@@ -493,7 +510,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           ),
                           confirmDismiss: (direction) async {
                             if (direction == DismissDirection.startToEnd) {
-                              _showDeleteOptions(context, user, roomId, false);
+                              _showChatOptions(context, user, roomId);
                               return false;
                             }
                             return true;
@@ -527,7 +544,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               _isNavigating = false;
                               _loadUsers();
                             },
-                            onLongPress: () => _showDeleteOptions(context, user, roomId, false),
+                            onLongPress: () => _showChatOptions(context, user, roomId),
                             onNewMessage: _onNewMessageReceived,
                           ),
                         ),

@@ -62,7 +62,7 @@ class WalletService {
       final response = await _dio.get('/api/wallet');
       return double.parse(response.data['balance'].toString());
     } catch (e) {
-      print('Get Balance Error: $e');
+      debugPrint('Get Balance Error: $e');
       return 0.0;
     }
   }
@@ -75,7 +75,7 @@ class WalletService {
       });
       return response.data['redirect_url']; // URL for Midtrans Snap Simulator
     } catch (e) {
-      print('Top Up Error: $e');
+      debugPrint('Top Up Error: $e');
       return null;
     }
   }
