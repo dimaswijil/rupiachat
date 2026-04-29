@@ -192,6 +192,121 @@ class _GroupListScreenState extends State<GroupListScreen> {
     );
   }
 
+  void _showGroupOptions(BuildContext context, GroupModel group, bool isDarkMode) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDarkMode ? RupiaColors.cardDark : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      group.photo != null && group.photo!.isNotEmpty
+                          ? CircleAvatar(
+                              radius: 20,
+                              backgroundImage: NetworkImage(group.photo!),
+                            )
+                          : Container(
+                              width: 40, height: 40,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [Color(0xFF2557B3), Color(0xFF0D2060)],
+                                ),
+                              ),
+                              child: const Icon(Icons.groups_rounded, color: Colors.white, size: 20),
+                            ),
+                      const SizedBox(width: 12),
+                      Text(
+                        group.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: isDarkMode ? Colors.white : RupiaColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(
+                    group.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                    color: RupiaColors.primary,
+                  ),
+                  title: Text(
+                    group.isPinned ? 'Lepas pin' : 'Pin grup',
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.white : RupiaColors.textPrimary,
+                    ),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _groupService.pinGroup(group.id, !group.isPinned);
+                    await _loadGroups();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(!group.isPinned ? 'Grup di-pin' : 'Pin dilepas'),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.exit_to_app, color: Colors.red),
+                  title: const Text(
+                    'Keluar Grup',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmLeaveGroup(context, group.id);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmLeaveGroup(BuildContext context, String groupId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluar Grup?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        content: const Text('Anda tidak akan bisa menerima pesan lagi di grup ini.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _groupService.leaveGroup(groupId);
+              _loadGroups();
+            },
+            child: const Text('Keluar', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGroupTile(GroupModel group, bool isDarkMode) {
     final time = _formatTime(group.lastMessageTime);
     final subtitle = _formatLastMessage(group.lastMessage, group.memberCount);
@@ -208,6 +323,7 @@ class _GroupListScreenState extends State<GroupListScreen> {
         ));
         _loadGroups();
       },
+      onLongPress: () => _showGroupOptions(context, group, isDarkMode),
       child: Container(
         color: isDarkMode ? RupiaColors.bgDark : Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

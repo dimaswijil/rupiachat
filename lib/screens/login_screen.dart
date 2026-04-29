@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
@@ -62,7 +63,19 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString('auth_token');
-        if (token != null) ChatService().setToken(token);
+        if (token != null) {
+          final chat = ChatService();
+          chat.setToken(token);
+          // Ambil FCM token dan update ke server
+          try {
+            final fcmToken = await FirebaseMessaging.instance.getToken();
+            if (fcmToken != null) {
+              chat.updateFcmToken(fcmToken);
+            }
+          } catch (e) {
+            debugPrint('Gagal mendapatkan FCM token saat login: $e');
+          }
+        }
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const MainNavScreen()),

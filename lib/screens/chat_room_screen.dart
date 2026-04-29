@@ -265,6 +265,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           channelName: widget.roomId,
           otherUserName: widget.otherUser.name,
           otherUserId: widget.otherUser.uid,
+          otherUserPhoto: widget.otherUser.photoUrl,
           isVideoCall: isVideo,
         ),
       ));

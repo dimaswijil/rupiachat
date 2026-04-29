@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
 
 import 'services/chat_service.dart';
+import 'services/call_notification_service.dart';
 import 'utils/colors.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_nav_screen.dart';
@@ -14,7 +15,7 @@ import 'screens/main_nav_screen.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print('Notif background: ${message.notification?.title}');
+  debugPrint('Notif background: ${message.notification?.title}');
 }
 
 // Global Notifier untuk Dark Mode
@@ -66,8 +67,11 @@ void main() async {
     });
 
   } catch (e) {
-    print("🔥 Firebase Init Gagal (Bisa diabaikan jika di iOS gratis): $e");
+    debugPrint("🔥 Firebase Init Gagal (Bisa diabaikan jika di iOS gratis): $e");
   }
+
+  // 8. Inisialisasi listener panggilan masuk
+  CallNotificationService().initialize();
 
   // 7. Langsung render aplikasi agar tidak putih/stuck!
   runApp(const RupiaChatApp());

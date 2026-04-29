@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../config/api_config.dart';
@@ -112,7 +113,7 @@ class AuthService {
     try {
       return await FirebaseMessaging.instance.getToken();
     } catch (e) {
-      print('FCM getToken gagal (normal di iOS Simulator): $e');
+      debugPrint('FCM getToken gagal (normal di iOS Simulator): $e');
       return null;
     }
   }

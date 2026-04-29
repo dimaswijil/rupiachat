@@ -137,6 +137,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
           channelName: channelName,
           otherUserName: otherUserName,
           otherUserId: otherUserId,
+          otherUserPhoto: call['other_user_photo']?.toString(),
           isVideoCall: isVideo,
         ),
       ));

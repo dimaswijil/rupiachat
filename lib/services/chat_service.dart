@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
@@ -29,7 +30,7 @@ class ChatService {
     _dio.interceptors.add(InterceptorsWrapper(
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          print('[ChatService] 401 Unauthenticated — auto logout');
+          debugPrint('[ChatService] 401 Unauthenticated — auto logout');
           await _handleUnauthorized();
         }
         return handler.next(error);
@@ -53,28 +54,28 @@ class ChatService {
     }
 
     try {
-      print('[Pusher] Initializing core pipeline...');
+      if (kDebugMode) debugPrint('[Pusher] Initializing core pipeline...');
       await _pusher.init(
         apiKey: 'fd71e26c996be8a21eef',
         cluster: 'ap1',
         // ✅ STRATEGI PALING STABIL: Satu handler global di init.
         // Handler ini akan menangkap SEMUA event dari SEMUA channel yang di-subscribe.
         onEvent: (event) {
-          print('[Pusher] Incoming: ${event.channelName} -> ${event.eventName}');
+          // Verbose log disabled for production
           _globalEventController.add(event);
         },
         onConnectionStateChange: (state, prev) {
-          print('[Pusher] Connection changed: $prev -> $state');
+          if (kDebugMode) debugPrint('[Pusher] Connection: $prev -> $state');
         },
         onError: (msg, code, e) {
-          print('[Pusher] Connection Error: $msg ($code)');
+          debugPrint('[Pusher] Error: $msg ($code)');
         },
       );
       await _pusher.connect();
       _pusherInitialized = true;
-      print('[Pusher] Core pipeline ready ✅');
+      if (kDebugMode) debugPrint('[Pusher] Core pipeline ready ✅');
     } catch (e) {
-      print('[Pusher] Critical Init Error: $e');
+      debugPrint('[Pusher] Critical Init Error: $e');
     }
   }
 
@@ -113,7 +114,7 @@ class ChatService {
     if (!_subscribedChannels.contains(channelName)) {
       _pusher.subscribe(channelName: channelName);
       _subscribedChannels.add(channelName);
-      print('[Pusher] Subscribed to $channelName');
+      if (kDebugMode) debugPrint('[Pusher] Subscribed to $channelName');
     }
 
     // Return a filtered, deduplicated stream from the global broadcaster
@@ -127,7 +128,7 @@ class ChatService {
               return MessageModel.fromMap(data['message'], data['message']['id'].toString());
             }
           } catch (e) {
-            print('[Pusher] Message Parse Error: $e');
+            debugPrint('[Pusher] Message Parse Error: $e');
           }
           return null;
         })
@@ -142,7 +143,7 @@ class ChatService {
     if (!_subscribedChannels.contains(channelName)) {
       _pusher.subscribe(channelName: channelName);
       _subscribedChannels.add(channelName);
-      print('[Pusher] Subscribed to $channelName');
+      if (kDebugMode) debugPrint('[Pusher] Subscribed to $channelName');
     }
 
     return _globalEventController.stream
@@ -191,7 +192,7 @@ class ChatService {
         'room_id': roomId,
         'is_archived': archive ? 1 : 0,
       });
-    } catch (e) { print('Archive Error: $e'); }
+    } catch (e) { debugPrint('Archive Error: $e'); }
   }
 
   Future<void> deleteRoom(String roomId, String type) async {
@@ -200,7 +201,7 @@ class ChatService {
         'room_id': roomId,
         'type': type, // 'me' atau 'everyone'
       });
-    } catch (e) { print('DeleteRoom Error: $e'); }
+    } catch (e) { debugPrint('DeleteRoom Error: $e'); }
   }
 
   Future<void> togglePin(String roomId, bool pin) async {
@@ -209,13 +210,13 @@ class ChatService {
         'room_id': roomId,
         'is_pinned': pin ? 1 : 0,
       });
-    } catch (e) { print('Pin Error: $e'); }
+    } catch (e) { debugPrint('Pin Error: $e'); }
   }
 
   Future<void> updateFcmToken(String fcmToken) async {
     try {
       await _dio.post('/api/user/fcm-token', data: {'fcm_token': fcmToken});
-    } catch (e) { print('FCM Token Update Error: $e'); }
+    } catch (e) { debugPrint('FCM Token Update Error: $e'); }
   }
 
   Future<void> leaveRoom(String roomId) async {
@@ -223,14 +224,14 @@ class ChatService {
       final channelName = 'chat.$roomId';
       await _pusher.unsubscribe(channelName: channelName);
       _subscribedChannels.remove(channelName);
-      print('[Pusher] Unsubscribed from $channelName');
+      if (kDebugMode) debugPrint('[Pusher] Unsubscribed from $channelName');
     } catch (_) {}
   }
 
   Future<void> markAsRead(String roomId) async {
     try {
       await _dio.post('/api/messages/mark-as-read', data: {'room_id': roomId});
-    } catch (e) { print('MarkAsRead Error: $e'); }
+    } catch (e) { debugPrint('MarkAsRead Error: $e'); }
   }
 
   Future<void> sendMessage({required String roomId, required String senderId, required String text, String type = 'text'}) async {
