@@ -45,15 +45,24 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
   void _startCountdown() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_countdown <= 0) { t.cancel(); } else { setState(() => _countdown--); }
+      if (_countdown <= 0) {
+        t.cancel();
+      } else {
+        setState(() => _countdown--);
+      }
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel(); _shakeCtrl.dispose();
-    for (final c in _ctrls) c.dispose();
-    for (final f in _nodes) f.dispose();
+    _timer?.cancel();
+    _shakeCtrl.dispose();
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    for (final f in _nodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -83,12 +92,15 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
     if (_countdown > 0 || _resending) return;
     setState(() => _resending = true);
     final result = await _auth.requestPasswordResetOtp(widget.email);
+    if (!mounted) return;
     setState(() => _resending = false);
     if (result['success'] == true) {
       setState(() => _countdown = result['expires_in'] ?? 300);
       _startCountdown();
       _showSuccess('Kode OTP baru telah dikirim');
-      for (final c in _ctrls) c.clear();
+      for (final c in _ctrls) {
+        c.clear();
+      }
       _nodes[0].requestFocus();
     } else {
       _showError(result['error'] ?? 'Gagal mengirim ulang');
@@ -97,7 +109,11 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
 
   void _verifyAndContinue() {
     final code = _otpCode;
-    if (code.length < 6) { _shakeCtrl.forward(from: 0); _showError('Masukkan 6 digit kode OTP'); return; }
+    if (code.length < 6) {
+      _shakeCtrl.forward(from: 0);
+      _showError('Masukkan 6 digit kode OTP');
+      return;
+    }
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => ForgotPasswordNewScreen(email: widget.email, otpCode: code),
     ));
@@ -107,7 +123,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
   Widget build(BuildContext context) {
     return Theme(
       data: ThemeData.light().copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: RupiaColors.primary), useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: RupiaColors.primary),
       ),
       child: Scaffold(
         body: Stack(

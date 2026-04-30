@@ -9,24 +9,30 @@ import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
 import 'chat_room_screen.dart';
 import 'archived_chat_screen.dart';
-import 'create_group_screen.dart';
-import 'group_chat_screen.dart';
 import 'new_chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
   @override
-  State<ChatListScreen> createState() => _ChatListScreenState();
+  Widget build(BuildContext context) {
+    return const _ChatListScreenContent();
+  }
 }
 
-class _ChatListScreenState extends State<ChatListScreen> {
+class _ChatListScreenContent extends StatefulWidget {
+  const _ChatListScreenContent();
+
+  @override
+  State<_ChatListScreenContent> createState() => _ChatListScreenState();
+}
+
+class _ChatListScreenState extends State<_ChatListScreenContent> {
   final _auth = AuthService();
   final _chat = ChatService();
   final _groupService = GroupService();
 
   List<UserModel> _users = [];
-  List<GroupModel> _groups = [];
   List<dynamic> _mergedChats = [];
   bool _loading = true;
   bool _isNavigating = false;
@@ -61,19 +67,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
     await ChatService.initPusher();
 
     final users = await _chat.getUsers(uid);
-    final groups = await _groupService.getGroups();
-    // Urutkan grup: yang dipin di atas
-    groups.sort((a, b) {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return 0;
-    });
 
     if (mounted) {
       setState(() {
         _currentUid = uid;
         _users = users;
-        _groups = groups;
         _filterUsers(_searchController.text);
         _loading = false;
       });
@@ -224,7 +222,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _confirmDeleteChat(context, roomId, false);
+                    _confirmDeleteChat(context, roomId);
                   },
                 ),
               ],
@@ -235,54 +233,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  void _showDeleteOptions(BuildContext context, dynamic item, String roomId, bool isGroup) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDarkMode ? RupiaColors.cardDark : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              if (!isGroup) ...[
-                ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.red),
-                  title: const Text('Hapus Chat', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _confirmDeleteChat(context, roomId, false);
-                  },
-                ),
-              ] else ...[
-                ListTile(
-                  leading: const Icon(Icons.exit_to_app, color: Colors.red),
-                  title: const Text('Keluar Grup', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _confirmExitGroup(context, (item as GroupModel).id);
-                  },
-                ),
-              ],
-              ListTile(
-                leading: const Icon(Icons.cancel_outlined),
-                title: const Text('Batal'),
-                onTap: () => Navigator.pop(ctx),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _confirmDeleteChat(BuildContext context, String roomId, bool isGroup) {
+  void _confirmDeleteChat(BuildContext context, String roomId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -308,30 +259,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
               _loadUsers();
             },
             child: const Text('Hapus untuk Semua', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmExitGroup(BuildContext context, String groupId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Keluar Grup?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        content: const Text('Anda tidak akan bisa menerima pesan lagi di grup ini.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _groupService.leaveGroup(groupId);
-              _loadUsers();
-            },
-            child: const Text('Keluar', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -399,6 +326,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     context,
                     MaterialPageRoute(builder: (_) => const NewChatScreen()),
                   );
+                  if (!mounted) return;
                   _isNavigating = false;
                   _loadUsers();
                 },
@@ -459,6 +387,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ),
                           ),
                         );
+                        if (!mounted) return;
                         _isNavigating = false;
                         _loadUsers();
                       },
@@ -530,6 +459,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               if (_isNavigating) return;
                               _isNavigating = true;
                               await _chat.markAsRead(roomId);
+                              if (!mounted) return;
                               await Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -541,6 +471,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                   ),
                                 ),
                               );
+                              if (!mounted) return;
                               _isNavigating = false;
                               _loadUsers();
                             },
@@ -611,9 +542,9 @@ class _UserTileState extends State<_UserTile> {
         rawMsg = '📞 Panggilan Suara';
       }
     }
-    final _lastMessage = rawMsg;
-    final _unreadCount = widget.user.unreadCount ?? 0;
-    final _time = _formatTimeFromDate(widget.user.lastMessageTime);
+    final lastMessage = rawMsg;
+    final unreadCount = widget.user.unreadCount;
+    final time = _formatTimeFromDate(widget.user.lastMessageTime);
 
     return InkWell(
       onTap: widget.onTap,
@@ -666,20 +597,20 @@ class _UserTileState extends State<_UserTile> {
                           ),
                           if (widget.user.isPinned) ...[
                             const SizedBox(width: 4),
-                            Icon(
+                            const Icon(
                               Icons.push_pin,
                               size: 14,
-                              color: isDarkMode ? Colors.white38 : RupiaColors.textSecondary,
+                              color: RupiaColors.textSecondary,
                             ),
                           ],
                         ],
                       ),
                     ),
-                    if (_time.isNotEmpty)
-                      Text(_time,
+                    if (time.isNotEmpty)
+                      Text(time,
                           style: TextStyle(
                               fontSize: 11,
-                              color: _unreadCount > 0
+                              color: unreadCount > 0
                                   ? RupiaColors.primary
                                   : (isDarkMode ? Colors.white38 : RupiaColors.textSecondary))),
                   ],
@@ -688,12 +619,12 @@ class _UserTileState extends State<_UserTile> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(_lastMessage,
+                      child: Text(lastMessage,
                           style: TextStyle(
                               fontSize: 13, color: isDarkMode ? Colors.white54 : RupiaColors.textSecondary),
                           overflow: TextOverflow.ellipsis),
                     ),
-                    if (_unreadCount > 0)
+                    if (unreadCount > 0)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -701,125 +632,10 @@ class _UserTileState extends State<_UserTile> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          _unreadCount.toString(),
+                          unreadCount.toString(),
                           style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-// ── Widget Group Tile ─────────────────────────────────────────
-class _GroupTile extends StatelessWidget {
-  final GroupModel group;
-  final bool isDarkMode;
-  final VoidCallback onTap;
-
-  const _GroupTile({
-    required this.group,
-    required this.isDarkMode,
-    required this.onTap,
-  });
-
-  String _formatTime(DateTime? time) {
-    if (time == null) return '';
-    final local = time.toLocal();
-    return "${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}";
-  }
-
-  String _formatLastMessage(String? msg, int memberCount) {
-    if (msg == null || msg.isEmpty) return '$memberCount anggota';
-    if (msg.startsWith('http')) return '📷 Foto';
-    if (msg == '[Gambar]') return '📷 Foto';
-    return msg;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        color: isDarkMode ? RupiaColors.bgDark : Colors.white,
-        margin: const EdgeInsets.only(bottom: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(children: [
-          // Group avatar
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: RupiaColors.primary.withOpacity(0.12),
-              shape: BoxShape.circle,
-              image: group.photo != null
-                  ? DecorationImage(
-                      image: NetworkImage(group.photo!),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
-            ),
-            child: group.photo == null
-                ? const Icon(Icons.group, color: RupiaColors.primary, size: 24)
-                : null,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        group.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                          color: isDarkMode ? Colors.white : RupiaColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (group.lastMessageTime != null)
-                          Text(
-                            _formatTime(group.lastMessageTime),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDarkMode ? Colors.white38 : RupiaColors.textSecondary,
-                            ),
-                          ),
-                        if (group.isPinned)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Icon(Icons.push_pin, size: 14, color: RupiaColors.primary),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _formatLastMessage(group.lastMessage, group.memberCount),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDarkMode ? Colors.white54 : RupiaColors.textSecondary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
                   ],
                 ),
               ],

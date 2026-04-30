@@ -119,6 +119,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
       final groupId = call['group_id']?.toString() ?? '';
       final groupName = call['group_name']?.toString() ?? 'Grup';
       if (groupId.isEmpty) return;
+      if (!mounted) return;
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => GroupCallScreen(
           channelName: groupId,
@@ -131,6 +132,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
       final otherUserId = call['other_user_id']?.toString() ?? '';
       final otherUserName = call['other_user_name']?.toString() ?? 'Unknown';
       if (otherUserId.isEmpty) return;
+      if (!mounted) return;
       final channelName = 'call_${uid}_$otherUserId';
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => CallScreen(

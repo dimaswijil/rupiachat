@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/group_service.dart';
 import '../models/group_model.dart';
-import '../widgets/avatar_widget.dart';
 import '../utils/colors.dart';
 import 'create_group_screen.dart';
 import 'group_chat_screen.dart';
