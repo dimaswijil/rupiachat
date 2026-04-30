@@ -56,9 +56,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
     _chat.setToken(token);
     _groupService.setToken(token);
 
-    // Menghapus 'await ChatService.initPusher()' yang memblokir UI.
-    // Pusher akan otomatis diinisialisasi secara background saat listen.
-    ChatService.initPusher(); // Panggil tanpa await
+    // Await initPusher — aman karena Completer mencegah init ganda
+    // dan panggilan kedua langsung return tanpa blocking.
+    await ChatService.initPusher();
 
     final users = await _chat.getUsers(uid);
     final groups = await _groupService.getGroups();

@@ -36,26 +36,16 @@ void main() async {
   final isDarkMode = prefs.getBool('isDarkMode') ?? false;
   themeNotifier.value = isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
-  // 1. Init Firebase — HANYA untuk notifikasi FCM (Wajib await)
+  // 1. Init Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // 3. Setup notifikasi background
+    // 2. Setup handler notifikasi background (wajib top-level function)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 4. Minta izin notifikasi dari user (JANGAN DIAWAIT, agar jika limitasi Apple terjadi tidak bikin hang)
-    FirebaseMessaging.instance.requestPermission().then((_) {
-      // 5. Foreground notification
-      FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }).catchError((e) { debugPrint('FCM Permission Error: $e'); return null; });
-
-    // 6. Listen token refresh → update ke server
+    // 3. Listen token refresh → update ke server
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       final prefs = await SharedPreferences.getInstance();
       final authToken = prefs.getString('auth_token');
@@ -67,13 +57,14 @@ void main() async {
     });
 
   } catch (e) {
-    debugPrint("🔥 Firebase Init Gagal (Bisa diabaikan jika di iOS gratis): $e");
+    debugPrint("🔥 Firebase Init Gagal: $e");
   }
 
-  // 8. Inisialisasi listener panggilan masuk
-  CallNotificationService().initialize();
+  // 4. Inisialisasi Notification Service (channel + listeners + permissions)
+  // HARUS await agar notification channel sudah ada sebelum app jalan
+  await CallNotificationService().initialize();
 
-  // 7. Langsung render aplikasi agar tidak putih/stuck!
+  // 5. Render aplikasi
   runApp(const RupiaChatApp());
 }
 
