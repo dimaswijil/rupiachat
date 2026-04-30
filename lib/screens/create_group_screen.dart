@@ -27,7 +27,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final Set<String> _selectedIds = {};
   bool _loading = true;
   bool _creating = false;
-  String _currentUid = '';
 
   // Step: 0 = pilih kontak, 1 = isi detail grup
   int _step = 0;
@@ -55,7 +54,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 
     if (mounted) {
       setState(() {
-        _currentUid = uid;
         _allUsers = users;
         _filteredUsers = users;
         _loading = false;

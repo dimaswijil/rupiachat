@@ -77,7 +77,7 @@ class ChatService {
         },
         onConnectionStateChange: (state, prev) {
           if (kDebugMode) debugPrint('[Pusher] Connection: $prev -> $state');
-          _lastConnectionState = state ?? '';
+          _lastConnectionState = state;
 
           // Reset error counter saat berhasil connect
           if (state == 'CONNECTED') {
