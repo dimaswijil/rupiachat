@@ -42,10 +42,13 @@ class ChatService {
   static final _pusher = PusherChannelsFlutter.getInstance();
   static final StreamController<PusherEvent> _globalEventController = StreamController<PusherEvent>.broadcast();
   static bool _pusherInitialized = false;
+  static Completer<void>? _initCompleter; // ← Mencegah init ganda
   static final Set<String> _subscribedChannels = {};
+  static String _lastConnectionState = '';
+  static int _errorCount = 0; // ← Membatasi spam log error
 
   static Future<void> initPusher() async {
-    // Selalu panggil connect untuk memastikan status aktif
+    // Jika sudah selesai init, cukup pastikan tetap connected
     if (_pusherInitialized) {
       try {
         await _pusher.connect();
@@ -53,29 +56,91 @@ class ChatService {
       return;
     }
 
+    // Jika sedang proses init (dipanggil dari tempat lain), tunggu saja
+    if (_initCompleter != null) {
+      await _initCompleter!.future;
+      return;
+    }
+
+    // Mulai proses init — kunci agar tidak bisa dipanggil ganda
+    _initCompleter = Completer<void>();
+
     try {
       if (kDebugMode) debugPrint('[Pusher] Initializing core pipeline...');
+      _errorCount = 0;
+
       await _pusher.init(
         apiKey: 'fd71e26c996be8a21eef',
         cluster: 'ap1',
-        // ✅ STRATEGI PALING STABIL: Satu handler global di init.
-        // Handler ini akan menangkap SEMUA event dari SEMUA channel yang di-subscribe.
         onEvent: (event) {
-          // Verbose log disabled for production
           _globalEventController.add(event);
         },
         onConnectionStateChange: (state, prev) {
           if (kDebugMode) debugPrint('[Pusher] Connection: $prev -> $state');
+          _lastConnectionState = state ?? '';
+
+          // Reset error counter saat berhasil connect
+          if (state == 'CONNECTED') {
+            _errorCount = 0;
+          }
+
+          // ✅ KUNCI FIX ANDROID: Saat Pusher berhasil reconnect,
+          // subscribe ulang SEMUA channel yang sebelumnya aktif.
+          if (state == 'CONNECTED' && _subscribedChannels.isNotEmpty) {
+            final channels = Set<String>.from(_subscribedChannels);
+            for (final ch in channels) {
+              try {
+                _pusher.subscribe(channelName: ch);
+                if (kDebugMode) debugPrint('[Pusher] Re-subscribed to $ch after reconnect');
+              } catch (e) {
+                debugPrint('[Pusher] Re-subscribe error for $ch: $e');
+              }
+            }
+          }
         },
         onError: (msg, code, e) {
-          debugPrint('[Pusher] Error: $msg ($code)');
+          // Batasi log error agar tidak membanjiri console
+          _errorCount++;
+          if (_errorCount <= 2) {
+            debugPrint('[Pusher] Error #$_errorCount: $msg ($code)');
+          }
+          // Diam-diam setelah 2 error — Pusher sudah auto-reconnect sendiri
         },
       );
-      await _pusher.connect();
+
+      // ── Retry connect dengan exponential backoff ──
+      // Library pusher kadang gagal pada connect() pertama di emulator,
+      // jadi kita coba beberapa kali dengan jeda yang makin lama.
+      bool connected = false;
+      for (int attempt = 1; attempt <= 5; attempt++) {
+        try {
+          await _pusher.connect();
+          // Tunggu sebentar untuk cek apakah benar-benar tersambung
+          await Future.delayed(Duration(seconds: attempt));
+          if (_lastConnectionState == 'CONNECTED') {
+            connected = true;
+            break;
+          }
+          debugPrint('[Pusher] Attempt $attempt: state=$_lastConnectionState, retrying...');
+        } catch (e) {
+          debugPrint('[Pusher] Connect attempt $attempt failed: $e');
+        }
+        // Tunggu sebelum retry berikutnya (2s, 4s, 8s, 16s, 32s)
+        await Future.delayed(Duration(seconds: attempt * 2));
+      }
+
       _pusherInitialized = true;
-      if (kDebugMode) debugPrint('[Pusher] Core pipeline ready ✅');
+      if (connected) {
+        debugPrint('[Pusher] ✅ Core pipeline ready & CONNECTED');
+      } else {
+        debugPrint('[Pusher] ⚠️ Initialized but not yet connected — will auto-retry in background');
+      }
     } catch (e) {
       debugPrint('[Pusher] Critical Init Error: $e');
+    } finally {
+      // Selesai init — buka kunci agar caller lain bisa lanjut
+      _initCompleter?.complete();
+      _initCompleter = null;
     }
   }
 

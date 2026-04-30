@@ -31,7 +31,7 @@ class ChatRoomScreen extends StatefulWidget {
   State<ChatRoomScreen> createState() => _ChatRoomScreenState();
 }
 
-class _ChatRoomScreenState extends State<ChatRoomScreen> {
+class _ChatRoomScreenState extends State<ChatRoomScreen> with WidgetsBindingObserver {
   final _controller = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _picker = ImagePicker();
@@ -43,17 +43,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   StreamSubscription? _typingSubscription;
   StreamSubscription? _readSubscription;
   Timer? _typingTimer;
+  Timer? _pollTimer;
   bool _isTyping = false;
   bool _isOtherUserTyping = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ChatService.initPusher();
     _loadHistory();
     _listenRealtime();
     _listenTypingState();
     _listenReadReceipts();
+    _startPollingFallback();
     widget.chatService.markAsRead(widget.roomId);
 
     _controller.addListener(_onTextChanged);
@@ -61,11 +64,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_isTyping) {
       widget.chatService.sendTyping(widget.roomId, false);
     }
     widget.chatService.leaveRoom(widget.roomId);
     _typingTimer?.cancel();
+    _pollTimer?.cancel();
     _controller.removeListener(_onTextChanged);
     _subscription?.cancel();
     _typingSubscription?.cancel();
@@ -73,6 +78,66 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     _controller.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Saat app kembali dari background, reconnect Pusher & refresh pesan
+      ChatService.initPusher();
+      _loadHistory();
+    }
+  }
+
+  /// Polling fallback: setiap 5 detik, cek pesan baru dari server.
+  /// Ini mengatasi kelemahan Android yang sering putus WebSocket.
+  void _startPollingFallback() {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) _pollNewMessages();
+    });
+  }
+
+  Future<void> _pollNewMessages() async {
+    try {
+      final freshMessages = await widget.chatService.loadMessages(widget.roomId);
+      if (!mounted || freshMessages.isEmpty) return;
+      final reversed = freshMessages.reversed.toList();
+      bool changed = false;
+
+      for (final msg in reversed) {
+        if (msg.id.startsWith('temp_')) continue;
+
+        final existingIndex = _messages.indexWhere((m) => m.id == msg.id);
+        if (existingIndex != -1) {
+          // Pesan sudah ada — cek apakah statusnya berubah (delivered → read)
+          if (_messages[existingIndex].status != msg.status) {
+            _messages[existingIndex] = msg;
+            changed = true;
+          }
+        } else {
+          // Cek apakah ada versi temp_ dari pesan ini (same text + sender)
+          final tempIndex = _messages.indexWhere((m) =>
+            m.id.startsWith('temp_') &&
+            m.text == msg.text &&
+            m.senderId == msg.senderId
+          );
+          if (tempIndex != -1) {
+            // Ganti temp_ dengan pesan asli dari server
+            _messages[tempIndex] = msg;
+            changed = true;
+          } else {
+            // Pesan baru yang benar-benar belum ada
+            _messages.insert(0, msg);
+            changed = true;
+          }
+        }
+      }
+
+      if (changed && mounted) {
+        setState(() {});
+        widget.chatService.markAsRead(widget.roomId);
+      }
+    } catch (_) {}
   }
 
   void _onTextChanged() {
