@@ -14,7 +14,7 @@ class ChatService {
   static final ChatService _instance = ChatService._internal();
   factory ChatService() => _instance;
 
-  static const _baseUrl = ApiConfig.baseUrl;
+  static final _baseUrl = ApiConfig.baseUrl;
 
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
@@ -343,5 +343,41 @@ class ChatService {
       }
       return [];
     } catch (e) { return []; }
+  }
+
+  Future<void> sendCallSignal({
+    required String receiverId,
+    required String channelName,
+    required String signalType, // 'decline', 'cancel', 'end'
+  }) async {
+    try {
+      await _dio.post('/api/agora/signal', data: {
+        'receiver_id': receiverId,
+        'channel_name': channelName,
+        'signal_type': signalType,
+      });
+    } catch (e) {
+      debugPrint('SendCallSignal Error: $e');
+    }
+  }
+
+  Future<void> saveCallLog({
+    required String receiverId,
+    required String channelName,
+    required String type,
+    required String status,
+    required int duration,
+  }) async {
+    try {
+      await _dio.post('/api/call-logs', data: {
+        'receiver_id': receiverId,
+        'channel_name': channelName,
+        'type': type,
+        'status': status,
+        'duration': duration,
+      });
+    } catch (e) {
+      debugPrint('SaveCallLog Error: $e');
+    }
   }
 }

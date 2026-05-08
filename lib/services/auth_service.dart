@@ -6,10 +6,9 @@ import '../config/api_config.dart';
 
 class AuthService {
   // Base URL diambil dari ApiConfig (satu tempat untuk semua service)
-  static const _baseUrl = ApiConfig.baseUrl;
   
   final _dio = Dio(BaseOptions(
-    baseUrl: _baseUrl,
+    baseUrl: ApiConfig.baseUrl,
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 15),
     headers: {

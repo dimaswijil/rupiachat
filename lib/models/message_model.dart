@@ -51,6 +51,29 @@ class MessageModel {
     );
   }
 
+  // Copy with override
+  MessageModel copyWith({
+    String? id,
+    String? senderId,
+    String? text,
+    String? type,
+    String? amount,
+    DateTime? timestamp,
+    bool? isRead,
+    String? status,
+  }) {
+    return MessageModel(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      text: text ?? this.text,
+      type: type ?? this.type,
+      amount: amount ?? this.amount,
+      timestamp: timestamp ?? this.timestamp,
+      isRead: isRead ?? this.isRead,
+      status: status ?? this.status,
+    );
+  }
+
   // Untuk kirim ke Laravel (POST body)
   Map<String, dynamic> toMap() {
     return {

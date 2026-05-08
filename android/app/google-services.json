@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "112810255098",
+    "project_id": "rupiachat",
+    "storage_bucket": "rupiachat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:112810255098:android:899ab2c4532c0411f55f43",
+        "android_client_info": {
+          "package_name": "com.example.rupiachat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOGp4YTKQXK-jjrN866CiIUCQS4ISUaSU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -9,7 +9,7 @@ class WalletService {
   static final WalletService _instance = WalletService._internal();
   factory WalletService() => _instance;
 
-  static const _baseUrl = ApiConfig.baseUrl;
+  static final _baseUrl = ApiConfig.baseUrl;
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
     connectTimeout: const Duration(seconds: 15),
@@ -67,13 +67,15 @@ class WalletService {
     }
   }
 
+  /// Request Snap Token dari Laravel untuk Top Up via Midtrans SDK
+  /// Laravel mengembalikan {'snap_token': 'xxxxx'}
   Future<String?> generateTopUpToken(double amount) async {
     try {
       await _ensureToken();
       final response = await _dio.post('/api/wallet/topup', data: {
         'amount': amount,
       });
-      return response.data['redirect_url']; // URL for Midtrans Snap Simulator
+      return response.data['snap_token']; // Snap Token untuk Midtrans SDK
     } catch (e) {
       debugPrint('Top Up Error: $e');
       return null;

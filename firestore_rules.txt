@@ -1,0 +1,30 @@
+// ============================================================
+//  FIRESTORE SECURITY RULES for RupiaChat
+//  Paste this in Firebase Console → Firestore → Rules
+// ============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users collection — only owner can write their profile
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Chatrooms — only participants can read/write
+    match /chatrooms/{chatroomId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid in resource.data.participants;
+
+      // Messages inside chatroom
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && request.auth.uid == request.resource.data.senderId;
+        allow update, delete: if false; // messages cannot be edited/deleted
+      }
+    }
+  }
+}

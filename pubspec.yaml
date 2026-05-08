@@ -1,0 +1,47 @@
+name: rupiachat
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP — untuk call API Laravel
+  dio: ^5.4.0
+
+
+  # Real-time chat
+  pusher_channels_flutter: ^2.0.0
+
+  # Notifikasi push (Firebase FCM saja)
+  firebase_core: ^2.27.0
+  firebase_messaging: ^14.7.10
+
+  # Utility
+  uuid: ^4.3.3
+  intl: ^0.19.0
+  agora_rtc_engine: ^6.3.2
+  permission_handler: ^11.3.0
+  shared_preferences: ^2.2.2
+  image_picker: ^1.0.7 # Tambahkan ini untuk ambil gambar
+  image_cropper: 7.1.0 # Crop, rotate, tata letak gambar
+
+  cupertino_icons: ^1.0.8
+  url_launcher: ^6.2.5
+  flutter_local_notifications: ^19.5.0
+
+  midtrans_sdk: ^0.4.0
+  http: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

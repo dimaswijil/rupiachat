@@ -13,7 +13,7 @@ class GroupService {
   static final GroupService _instance = GroupService._internal();
   factory GroupService() => _instance;
 
-  static const _baseUrl = ApiConfig.baseUrl;
+  static final _baseUrl = ApiConfig.baseUrl;
 
   final _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,

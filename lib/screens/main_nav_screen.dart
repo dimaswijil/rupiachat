@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../utils/colors.dart';
 import '../main.dart'; // Import mainNavIndexNotifier
-import 'chat_list_screen.dart';
-import 'group_list_screen.dart';
-import 'wallet_screen.dart';
-import 'call_history_screen.dart';
-import 'profile_screen.dart';
+import 'chat/chat_list_screen.dart';
+import 'group/group_list_screen.dart';
+import 'wallet/wallet_screen.dart';
+import 'call/call_history_screen.dart';
+import 'profile/profile_screen.dart';
 
 // MainNavScreen = layar utama dengan bottom navigation bar
 class MainNavScreen extends StatefulWidget {

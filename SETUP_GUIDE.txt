@@ -1,0 +1,147 @@
+================================================
+  RupiaChat — Firebase Setup Guide (Step by Step)
+================================================
+
+STEP 1 — Create Firebase Project
+---------------------------------
+1. Go to https://console.firebase.google.com
+2. Click "Add project"
+3. Name it: rupiachat
+4. Disable Google Analytics (optional)
+5. Click "Create project"
+
+
+STEP 2 — Add Android App
+--------------------------
+1. In Firebase Console, click Android icon
+2. Package name: com.rupiachat.app
+3. App nickname: RupiaChat Android
+4. Click "Register app"
+5. Download google-services.json
+6. Place it in: android/app/google-services.json
+
+
+STEP 3 — Add iOS App
+----------------------
+1. In Firebase Console, click iOS icon
+2. Bundle ID: com.rupiachat.app
+3. App nickname: RupiaChat iOS
+4. Click "Register app"
+5. Download GoogleService-Info.plist
+6. Open Xcode → drag file into Runner/Runner folder
+7. Make sure "Copy items if needed" is checked
+
+
+STEP 4 — Enable Authentication
+--------------------------------
+1. Firebase Console → Authentication → Get started
+2. Sign-in method tab
+3. Enable: Email/Password → Save
+
+
+STEP 5 — Create Firestore Database
+------------------------------------
+1. Firebase Console → Firestore Database → Create database
+2. Choose: Start in test mode (for now)
+3. Choose server location: asia-southeast2 (Jakarta)
+4. Click "Enable"
+
+
+STEP 6 — Apply Security Rules
+--------------------------------
+1. Firestore → Rules tab
+2. Replace with content from firestore_rules.txt
+3. Click "Publish"
+
+
+STEP 7 — Install FlutterFire CLI
+----------------------------------
+Run in Terminal:
+
+  dart pub global activate flutterfire_cli
+
+Then in your Flutter project folder:
+
+  flutterfire configure --project=rupiachat
+
+This will auto-generate: lib/firebase_options.dart
+
+
+STEP 8 — Update pubspec.yaml
+------------------------------
+Add these under dependencies:
+
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.0
+  cloud_firestore: ^4.15.0
+  firebase_storage: ^11.6.0
+  image_picker: ^1.0.7
+  cached_network_image: ^3.3.1
+  intl: ^0.19.0
+  uuid: ^4.3.3
+
+Then run:
+  flutter pub get
+
+
+STEP 9 — Update main.dart
+---------------------------
+Replace your main.dart with the content from firebase_chat.dart
+
+
+STEP 10 — Update Android build files
+--------------------------------------
+In android/build.gradle, add inside buildscript > dependencies:
+  classpath 'com.google.gms:google-services:4.4.1'
+
+In android/app/build.gradle, add at the bottom:
+  apply plugin: 'com.google.gms.google-services'
+
+
+STEP 11 — Run the App!
+------------------------
+  flutter run
+
+================================================
+  Firestore Data Structure
+================================================
+
+users/
+  {uid}/
+    uid: string
+    name: string
+    email: string
+    photoUrl: string
+    isOnline: boolean
+    lastSeen: timestamp
+    createdAt: timestamp
+
+chatrooms/
+  {uid1_uid2}/              ← sorted alphabetically
+    participants: [uid1, uid2]
+    lastMessage: string
+    lastMessageTime: timestamp
+    messages/
+      {messageId}/
+        id: string
+        senderId: string
+        type: "text" | "payment"
+        text: string
+        amount: string
+        timestamp: timestamp
+        isRead: boolean
+
+================================================
+  How Real-time Chat Works
+================================================
+
+1. User A sends message
+   └── Written to Firestore: chatrooms/{id}/messages
+
+2. Firestore notifies all listeners instantly
+   └── StreamBuilder in ChatRoomScreen receives update
+
+3. User B's screen updates automatically
+   └── New message appears in real-time!
+
+No manual refresh needed — Firebase handles it all!
