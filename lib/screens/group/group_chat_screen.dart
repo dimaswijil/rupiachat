@@ -124,6 +124,24 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  Future<void> _pickCameraImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+    if (image != null) {
+      try {
+        await _groupService.sendImage(
+          groupId: widget.groupId,
+          filePath: image.path,
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gagal mengirim gambar')),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
@@ -261,37 +279,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.videocam_rounded, color: Colors.white, size: 24),
+                icon: const Icon(Icons.videocam_outlined, color: Colors.white, size: 26),
                 tooltip: 'Video Call Grup',
                 onPressed: () => _startGroupCall(isVideo: true),
               ),
               IconButton(
-                icon: const Icon(Icons.call_rounded, color: Colors.white, size: 22),
+                icon: const Icon(Icons.call_outlined, color: Colors.white, size: 24),
                 tooltip: 'Voice Call Grup',
                 onPressed: () => _startGroupCall(isVideo: false),
               ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.white),
-                onSelected: (val) {
-                  if (val == 'info') _showGroupInfo();
-                },
-                itemBuilder: (ctx) {
-                  final isDark = Theme.of(ctx).brightness == Brightness.dark;
-                  return [
-                    PopupMenuItem(
-                      value: 'info',
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 20,
-                              color: isDark ? Colors.white70 : Colors.black87),
-                          const SizedBox(width: 10),
-                          const Text('Info Grup'),
-                        ],
-                      ),
-                    ),
-                  ];
-                },
+              IconButton(
+                icon: const Icon(Icons.more_vert, color: Colors.white, size: 26),
+                onPressed: () {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     const SnackBar(content: Text('Fitur opsi masih dalam pengembangan'), duration: Duration(seconds: 1))
+                   );
+                }
               ),
             ],
           ),
@@ -397,54 +400,161 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         ),
         // Input area
         Container(
-          color: isDarkMode ? RupiaColors.cardDark : Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(children: [
-            IconButton(
-              icon: const Icon(Icons.image, color: RupiaColors.primary),
-              onPressed: _pickImage,
-            ),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDarkMode ? RupiaColors.bgDark : RupiaColors.bg,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TextField(
-                  controller: _controller,
-                  style: TextStyle(
-                    color: isDarkMode ? Colors.white : RupiaColors.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Tulis pesan...',
-                    hintStyle: TextStyle(
-                      color:
-                          isDarkMode ? Colors.white54 : RupiaColors.textHint,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          color: Colors.transparent,
+          child: SafeArea(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? const Color(0xFF2B2B2B) : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.emoji_emotions_outlined, color: Colors.grey[500]),
+                          onPressed: () {},
+                        ),
+                        Expanded(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 120),
+                            child: TextField(
+                              controller: _controller,
+                              style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
+                              maxLines: null,
+                              textInputAction: TextInputAction.newline,
+                              decoration: InputDecoration(
+                                hintText: 'Ketik pesan',
+                                hintStyle: TextStyle(color: Colors.grey[500]),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.attach_file, color: Colors.grey[500]),
+                          onPressed: () => _showAttachmentMenu(context, isDarkMode),
+                        ),
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _controller,
+                          builder: (context, value, child) {
+                            if (value.text.isEmpty) {
+                              return IconButton(
+                                icon: Icon(Icons.camera_alt, color: Colors.grey[500]),
+                                onPressed: _pickCameraImage,
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
                   ),
-                  onSubmitted: (_) => _sendMessage(),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(
-                  color: RupiaColors.primary,
-                  shape: BoxShape.circle,
+                const SizedBox(width: 8),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, child) {
+                    final isTyping = value.text.isNotEmpty;
+                    return GestureDetector(
+                      onTap: isTyping ? _sendMessage : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: const BoxDecoration(
+                          color: RupiaColors.primary, // RupiaChat Blue
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isTyping ? Icons.send : Icons.mic, 
+                          color: Colors.white, 
+                          size: 22,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                child: const Icon(Icons.send, color: Colors.white, size: 18),
-              ),
+              ],
             ),
-          ]),
+          ),
         ),
       ]),
+    );
+  }
+
+  void _showAttachmentMenu(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF161F24) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 16,
+          runSpacing: 20,
+          children: [
+            _buildAttachmentItem(ctx, icon: Icons.image, color: Colors.blueAccent, label: 'Galeri', isDev: false, onTap: () {
+               Navigator.pop(ctx);
+               Future.delayed(const Duration(milliseconds: 200), _pickImage);
+            }),
+            _buildAttachmentItem(ctx, icon: Icons.camera_alt, color: Colors.pinkAccent, label: 'Kamera', isDev: false, onTap: () {
+               Navigator.pop(ctx);
+               Future.delayed(const Duration(milliseconds: 200), _pickCameraImage);
+            }),
+            _buildAttachmentItem(ctx, icon: Icons.location_on, color: Colors.green, label: 'Lokasi', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.person, color: Colors.lightBlue, label: 'Kontak', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.insert_drive_file, color: Colors.deepPurpleAccent, label: 'Dokumen', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.headphones, color: Colors.orange, label: 'Audio', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.bar_chart, color: Colors.amber, label: 'Polling', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.event, color: Colors.redAccent, label: 'Acara', isDev: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachmentItem(BuildContext context, {required IconData icon, required Color color, required String label, required bool isDev, VoidCallback? onTap}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: () {
+        if (isDev) {
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label masih dalam pengembangan'), duration: const Duration(seconds: 1)));
+        } else {
+           if (onTap != null) onTap();
+        }
+      },
+      child: SizedBox(
+        width: 70,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF252A30) : Colors.grey[50],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 6),
+            Text(label, style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12), textAlign: TextAlign.center),
+            if (isDev)
+              Text('Dev', style: const TextStyle(color: RupiaColors.primary, fontSize: 9, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+          ],
+        ),
+      ),
     );
   }
 

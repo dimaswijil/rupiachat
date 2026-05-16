@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
@@ -35,12 +36,15 @@ class CallScreen extends StatefulWidget {
 }
 
 class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
-  late RtcEngine _engine;
+  RtcEngine? _engine;
+  bool _isEngineInitialized = false;
   bool _joined = false;
   bool _remoteUserJoined = false;
+  bool _remoteVideoReady = false;
+  bool _isRemoteVideoFrozen = false;
   int? _remoteUid;
   bool _muted = false;
-  bool _speakerOn = true;
+  late bool _speakerOn;
   bool _cameraOff = false;
   late bool _isVideoMode;
   Timer? _timer;
@@ -50,6 +54,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   bool _isEnding = false;
   bool _engineReady = false; // Prevent rendering before engine init
   Timer? _noAnswerTimer; // Timeout jika tidak diangkat
+  final AudioPlayer _ringbackPlayer = AudioPlayer();
 
   // Animations
   late AnimationController _pulseController;
@@ -65,6 +70,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _isVideoMode = widget.isVideoCall;
+    _speakerOn = widget.isVideoCall;
     _pulseController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
@@ -79,10 +85,18 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _fadeController.forward();
 
     _initAgora();
+
+    if (!widget.isIncoming) {
+      _playRingbackTone();
+    }
+
   }
 
   Future<void> _initAgora() async {
-    await [Permission.microphone, Permission.camera].request();
+    // Request semua permission yang dibutuhkan (sesuai Agora official docs)
+    await [Permission.microphone, Permission.camera, Permission.bluetooth, Permission.bluetoothConnect].request();
+
+    if (!mounted) return;
 
     if (agoraAppId.isEmpty) {
       if (mounted) {
@@ -100,6 +114,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     final authToken = await AuthService().currentToken;
     final currentUid = await AuthService().currentUid;
 
+    if (!mounted) return;
+
     if (authToken == null || currentUid == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,19 +127,36 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     }
 
     String agoraToken = '';
-    final agoraUid = int.tryParse(currentUid) ?? 0;
+    const int agoraUid = 0;
 
+    // ── 1. Request Agora token dari backend ──
     try {
-      final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ));
       dio.options.headers['Authorization'] = 'Bearer $authToken';
       dio.options.headers['Accept'] = 'application/json';
 
       final tokenRes = await dio.post('/api/agora/token', data: {
         'channel_name': widget.channelName,
-        'uid': currentUid,
+        'uid': '0',
       });
 
+      if (!mounted) return;
+
       agoraToken = tokenRes.data['token'] ?? '';
+      if (agoraToken.isEmpty) {
+        debugPrint('❌ Token kosong dari server');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Token panggilan kosong'), backgroundColor: Colors.red),
+          );
+          Navigator.pop(context);
+        }
+        return;
+      }
       debugPrint('✅ Agora token diterima: ${agoraToken.substring(0, 20)}...');
     } catch (e) {
       debugPrint('❌ Gagal request Agora token: $e');
@@ -136,9 +169,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       return;
     }
 
+    // ── 2. Kirim FCM ke penerima (hanya jika caller) ──
     if (!widget.isIncoming) {
       try {
-        final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+        final dio = Dio(BaseOptions(
+          baseUrl: ApiConfig.baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+        ));
         dio.options.headers['Authorization'] = 'Bearer $authToken';
         dio.options.headers['Accept'] = 'application/json';
 
@@ -150,39 +188,42 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         debugPrint('✅ FCM panggilan terkirim ke user ${widget.otherUserId}');
       } catch (e) {
         debugPrint('⚠️ Gagal kirim FCM panggilan: $e');
+        // Lanjut saja — caller tetap bisa join channel
       }
     }
 
-    _engine = createAgoraRtcEngine();
-    await _engine.initialize(RtcEngineContext(
-      appId: agoraAppId,
-      channelProfile: ChannelProfileType.channelProfileCommunication,
-    ));
+    if (!mounted) return;
 
-    await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
-    await _engine.setAudioProfile(
-      profile: AudioProfileType.audioProfileDefault,
-      scenario: AudioScenarioType.audioScenarioChatroom,
-    );
-
-    if (widget.isVideoCall) {
-      await _engine.enableVideo();
-      await _engine.setVideoEncoderConfiguration(
-        const VideoEncoderConfiguration(
-          dimensions: VideoDimensions(width: 640, height: 480),
-          frameRate: 15,
-          bitrate: 0, // auto
-        ),
-      );
-      await _engine.startPreview();
-    } else {
-      await _engine.disableVideo();
+    // ── 3. Inisialisasi Agora Engine ──
+    try {
+      if (_isEngineInitialized) return;
+      
+      _engine = createAgoraRtcEngine();
+      await _engine!.initialize(RtcEngineContext(
+        appId: agoraAppId,
+        channelProfile: ChannelProfileType.channelProfileCommunication,
+      ));
+    } catch (e) {
+      debugPrint('❌ Gagal inisialisasi Agora Engine: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memulai engine panggilan: $e'), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      }
+      return;
     }
 
-    _engine.registerEventHandler(
+    if (!mounted) {
+      await _disposeAgora();
+      return;
+    }
+
+    // ── 4. Register event handler SEBELUM join ──
+    _engine!.registerEventHandler(
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
-          debugPrint('✅ Berhasil join channel: ${connection.channelId}');
+          debugPrint('✅ Berhasil join channel: ${connection.channelId}, localUid: ${connection.localUid}, elapsed: ${elapsed}ms');
           if (mounted) setState(() => _joined = true);
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
@@ -192,6 +233,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               _remoteUserJoined = true;
               _remoteUid = remoteUid;
             });
+            _ringbackPlayer.stop();
             _noAnswerTimer?.cancel();
             _pulseController.stop();
             _startTimer();
@@ -201,35 +243,131 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         onUserOffline: (RtcConnection connection, int remoteUid, UserOfflineReasonType reason) {
           debugPrint('📴 Remote user offline: $remoteUid, reason: $reason');
           if (mounted) {
-            setState(() { _remoteUserJoined = false; _remoteUid = null; });
+            setState(() { 
+              _remoteUserJoined = false; 
+              _remoteVideoReady = false;
+              _remoteUid = null; 
+            });
             _stopTimer();
             Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) Navigator.pop(context);
+              if (mounted && !_isEnding) _endCall();
+            });
+          }
+        },
+        onRemoteVideoStateChanged: (RtcConnection connection, int remoteUid, RemoteVideoState state, RemoteVideoStateReason reason, int elapsed) {
+          debugPrint('📹 Remote video state: $state, reason: $reason');
+          if (mounted) {
+            setState(() {
+              _isRemoteVideoFrozen = state == RemoteVideoState.remoteVideoStateFrozen;
+              
+              if (state == RemoteVideoState.remoteVideoStateStarting || 
+                  state == RemoteVideoState.remoteVideoStateDecoding) {
+                _remoteVideoReady = true;
+                _isRemoteVideoFrozen = false;
+              } else if (state == RemoteVideoState.remoteVideoStateStopped) {
+                _remoteVideoReady = false;
+              }
             });
           }
         },
         onError: (ErrorCodeType err, String msg) {
           debugPrint('❌ Agora Error: $err - $msg');
+          // Jika error fatal, beri tahu user
+          if (err == ErrorCodeType.errInvalidToken || err == ErrorCodeType.errTokenExpired) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Token panggilan invalid/expired'), backgroundColor: Colors.red),
+              );
+              _endCall();
+            }
+          }
         },
         onConnectionStateChanged: (RtcConnection c, ConnectionStateType s, ConnectionChangedReasonType r) {
           debugPrint('🔄 Agora State: $s, Reason: $r');
+          if (s == ConnectionStateType.connectionStateFailed && mounted) {
+            debugPrint('❌ Koneksi Agora gagal total');
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Koneksi panggilan gagal'), backgroundColor: Colors.red),
+            );
+            _endCall();
+          }
+        },
+        onTokenPrivilegeWillExpire: (RtcConnection connection, String token) {
+          debugPrint('⚠️ Token akan expire!');
         },
       ),
     );
 
+    // ── 5. Konfigurasi audio & video ──
+    try {
+      await _engine!.setAudioProfile(
+        profile: AudioProfileType.audioProfileDefault,
+        scenario: widget.isVideoCall
+            ? AudioScenarioType.audioScenarioDefault
+            : AudioScenarioType.audioScenarioChatroom,
+      );
+
+      if (widget.isVideoCall) {
+        await _engine!.enableVideo();
+        await _engine!.setVideoEncoderConfiguration(
+          const VideoEncoderConfiguration(
+            dimensions: VideoDimensions(width: 640, height: 480),
+            frameRate: 15,
+            bitrate: 0,
+          ),
+        );
+        await _engine!.startPreview();
+      } else {
+        await _engine!.disableVideo();
+      }
+
+      await _engine!.setDefaultAudioRouteToSpeakerphone(_speakerOn);
+      await _engine!.setEnableSpeakerphone(_speakerOn);
+    } catch (e) {
+      debugPrint('⚠️ Error konfigurasi audio/video: $e');
+    }
+
+    _isEngineInitialized = true;
+    if (!mounted) {
+      await _disposeAgora();
+      return;
+    }
+
     if (mounted) setState(() => _engineReady = true);
 
-    await _engine.joinChannel(
-      token: agoraToken,
-      channelId: widget.channelName,
-      uid: agoraUid,
-      options: const ChannelMediaOptions(
-        publishCameraTrack: true,
-        publishMicrophoneTrack: true,
-        autoSubscribeVideo: true,
-        autoSubscribeAudio: true,
-      ),
-    );
+    // ── 6. Join Channel ──
+    debugPrint('🎯 === JOINING AGORA CHANNEL ===');
+    debugPrint('🎯 App ID: $agoraAppId');
+    debugPrint('🎯 Channel: ${widget.channelName}');
+    debugPrint('🎯 UID: $agoraUid');
+    debugPrint('🎯 Token prefix: ${agoraToken.substring(0, 10)}...');
+    debugPrint('🎯 Is Video: ${widget.isVideoCall}');
+
+    try {
+      if (!_joined) {
+        await _engine!.joinChannel(
+          token: agoraToken,
+          channelId: widget.channelName,
+          uid: agoraUid,
+          options: ChannelMediaOptions(
+            publishCameraTrack: widget.isVideoCall,
+            publishMicrophoneTrack: true,
+            autoSubscribeVideo: true,
+            autoSubscribeAudio: true,
+          ),
+        );
+        debugPrint('✅ joinChannel() berhasil');
+      }
+    } catch (e) {
+      debugPrint('❌ joinChannel() EXCEPTION: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal bergabung ke panggilan: $e'), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
 
     _noAnswerTimer = Timer(const Duration(seconds: 60), () {
       if (mounted && !_remoteUserJoined) {
@@ -237,6 +375,12 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         _endCall();
       }
     });
+  }
+
+  
+  void _playRingbackTone() async {
+    await _ringbackPlayer.setReleaseMode(ReleaseMode.loop);
+    await _ringbackPlayer.play(AssetSource('audio/ringback.wav'));
   }
 
   void _startTimer() {
@@ -254,26 +398,33 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 
   void _toggleMute() {
+    if (_engine == null || !_isEngineInitialized) return;
     setState(() => _muted = !_muted);
-    _engine.muteLocalAudioStream(_muted);
+    _engine!.muteLocalAudioStream(_muted);
   }
 
   void _toggleSpeaker() {
+    if (_engine == null || !_isEngineInitialized) return;
     setState(() => _speakerOn = !_speakerOn);
-    _engine.setEnableSpeakerphone(_speakerOn);
+    _engine!.setEnableSpeakerphone(_speakerOn);
   }
 
   void _toggleCamera() {
+    if (_engine == null || !_isEngineInitialized) return;
     setState(() => _cameraOff = !_cameraOff);
-    _engine.muteLocalVideoStream(_cameraOff);
+    _engine!.muteLocalVideoStream(_cameraOff);
   }
 
-  void _switchCamera() => _engine.switchCamera();
+  void _switchCamera() {
+    if (_engine == null || !_isEngineInitialized) return;
+    _engine!.switchCamera();
+  }
 
   void _upgradeToVideo() async {
-    await _engine.enableVideo();
-    await _engine.startPreview();
-    await _engine.updateChannelMediaOptions(
+    if (_engine == null || !_isEngineInitialized) return;
+    await _engine!.enableVideo();
+    await _engine!.startPreview();
+    await _engine!.updateChannelMediaOptions(
       const ChannelMediaOptions(
         publishCameraTrack: true,
         publishMicrophoneTrack: true,
@@ -286,19 +437,40 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _endCall() {
+  void _endCall() async {
     if (_isEnding) return;
     _isEnding = true;
+    _ringbackPlayer.stop();
     _stopTimer();
     _noAnswerTimer?.cancel();
-
-    if (mounted) Navigator.pop(context);
+    _hideControlsTimer?.cancel();
 
     _saveCallLog();
+
+    if (!widget.isIncoming && !_remoteUserJoined) {
+      _sendCancelSignal();
+    }
+
+    await _disposeAgora();
+
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _sendCancelSignal() async {
     try {
-      _engine.leaveChannel();
-      _engine.release();
-    } catch (_) {}
+      final authToken = await AuthService().currentToken;
+      if (authToken == null) return;
+      final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+      dio.options.headers['Authorization'] = 'Bearer $authToken';
+      dio.options.headers['Accept'] = 'application/json';
+      await dio.post('/api/agora/signal', data: {
+        'target_id': widget.otherUserId,
+        'channel_name': widget.channelName,
+        'signal_type': 'cancel',
+      });
+    } catch (e) {
+      debugPrint('SendCancelSignal Error: $e');
+    }
   }
 
   Future<void> _saveCallLog() async {
@@ -334,6 +506,21 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     if (_controlsVisible) _startHideControlsTimer();
   }
 
+  Future<void> _disposeAgora() async {
+    if (_engine == null) return;
+    
+    if (_joined) {
+      try { await _engine!.leaveChannel(); } catch (_) {}
+      _joined = false;
+    }
+    
+    try { await _engine!.stopPreview(); } catch (_) {}
+    try { await _engine!.release(); } catch (_) {}
+    _engine = null;
+    _isEngineInitialized = false;
+    _engineReady = false;
+  }
+
   @override
   void dispose() {
     _stopTimer();
@@ -341,32 +528,42 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _hideControlsTimer?.cancel();
     _pulseController.dispose();
     _fadeController.dispose();
-    try { _engine.leaveChannel(); _engine.release(); } catch (_) {}
+    _disposeAgora(); // Aman dipanggil berkali-kali berkat guard _engine == null
+    _ringbackPlayer.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0E21),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: GestureDetector(
-          onTap: _isVideoMode ? _toggleControls : null,
-          child: Stack(children: [
-            _buildBackground(),
-            if (_isVideoMode && _engineReady) ..._buildVideoViews(),
-            if (!_isVideoMode || !_remoteUserJoined) _buildCenterContent(),
-            if (_controlsVisible) _buildTopBar(),
-            if (_controlsVisible) _buildBottomControls(),
-          ]),
+    return WillPopScope(
+      onWillPop: () async {
+        if (!_isEnding) {
+          _endCall();
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0E21),
+        body: FadeTransition(
+          opacity: _fadeAnimation,
+          child: GestureDetector(
+            onTap: _isVideoMode ? _toggleControls : null,
+            child: Stack(children: [
+              _buildBackground(),
+              if (_isVideoMode && _engineReady) ..._buildVideoViews(),
+              if (!_isVideoMode || !_remoteUserJoined) _buildCenterContent(),
+              if (_controlsVisible) _buildTopBar(),
+              if (_controlsVisible) _buildBottomControls(),
+            ]),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildBackground() {
-    if (_isVideoMode && _remoteUserJoined) return const SizedBox.shrink();
+    if (_isVideoMode && (_remoteUserJoined || !_cameraOff)) return const SizedBox.shrink();
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -380,21 +577,79 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 
   List<Widget> _buildVideoViews() {
+    if (_engine == null || !_isEngineInitialized) return [];
+
+    if (!_remoteUserJoined) {
+      if (_cameraOff) return [];
+      return [
+        Positioned.fill(
+          child: AgoraVideoView(
+            controller: VideoViewController(
+              rtcEngine: _engine!,
+              canvas: const VideoCanvas(
+                uid: 0,
+                renderMode: RenderModeType.renderModeHidden,
+              ),
+              useFlutterTexture: false,
+              useAndroidSurfaceView: true,
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: Container(color: Colors.black54),
+        ),
+      ];
+    }
+
     return [
-      if (_remoteUserJoined && _remoteUid != null)
+      if (_remoteUid != null && _remoteVideoReady)
         Positioned.fill(
           child: AgoraVideoView(
             controller: VideoViewController.remote(
-              rtcEngine: _engine,
+              rtcEngine: _engine!,
               canvas: VideoCanvas(
                 uid: _remoteUid!,
                 renderMode: RenderModeType.renderModeHidden,
               ),
               connection: RtcConnection(channelId: widget.channelName),
+              useFlutterTexture: false,
+              useAndroidSurfaceView: true,
             ),
           ),
         ),
-      if (_joined && !_cameraOff)
+      if (_isRemoteVideoFrozen)
+        Positioned.fill(
+          child: Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white70),
+                  SizedBox(height: 16),
+                  Text('Koneksi lemah...', style: TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+          ),
+        )
+      else if (_remoteUid != null && !_remoteVideoReady)
+        Positioned.fill(
+          child: Container(
+            color: const Color(0xFF0A0E21),
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Color(0xFF4ADE80)),
+                  SizedBox(height: 16),
+                  Text('Menunggu video...', style: TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      if (!_cameraOff)
         Positioned(
           top: _pipTop, right: _pipRight,
           child: GestureDetector(
@@ -415,11 +670,13 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(14),
                 child: AgoraVideoView(
                   controller: VideoViewController(
-                    rtcEngine: _engine,
+                    rtcEngine: _engine!,
                     canvas: const VideoCanvas(
                       uid: 0,
                       renderMode: RenderModeType.renderModeHidden,
                     ),
+                    useFlutterTexture: false,
+                    useAndroidSurfaceView: true,
                   ),
                 ),
               ),
@@ -590,66 +847,83 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildBottomControls() {
+    // Kumpulkan semua tombol kontrol (tanpa End Call)
+    final List<Widget> controlButtons = [
+      _GlassButton(
+        icon: _muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+        label: _muted ? 'Unmute' : 'Mute',
+        isActive: _muted,
+        onTap: _toggleMute,
+      ),
+      if (!_isVideoMode)
+        _GlassButton(
+          icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_down_rounded,
+          label: _speakerOn ? 'Speaker' : 'Earpiece',
+          isActive: _speakerOn,
+          onTap: _toggleSpeaker,
+        ),
+      if (_isVideoMode)
+        _GlassButton(
+          icon: _cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+          label: 'Kamera',
+          isActive: _cameraOff,
+          onTap: _toggleCamera,
+        ),
+      if (!_isVideoMode && _joined)
+        _GlassButton(
+          icon: Icons.videocam_rounded,
+          label: 'Video',
+          onTap: _upgradeToVideo,
+        ),
+      if (_isVideoMode)
+        _GlassButton(
+          icon: Icons.cameraswitch_rounded,
+          label: 'Putar',
+          onTap: _switchCamera,
+        ),
+    ];
+
     return Positioned(
       bottom: 0, left: 0, right: 0,
       child: AnimatedOpacity(
         opacity: _controlsVisible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 300),
-        child: Padding(
+        child: Container(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).padding.bottom + 20,
-            left: 20, right: 20, top: 16,
+            bottom: MediaQuery.of(context).padding.bottom + 24,
+            left: 24, right: 24, top: 16,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [
+                Colors.black.withOpacity(0.5),
+                Colors.transparent,
+              ],
+            ),
           ),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.08),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(color: Colors.white.withOpacity(0.1)),
             ),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-              _GlassButton(
-                icon: _muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                label: _muted ? 'Unmute' : 'Mute',
-                isActive: _muted, onTap: _toggleMute,
-              ),
-              if (_isVideoMode)
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Tombol kontrol (Mute, Speaker/Camera, Video/Switch)
+                ...controlButtons,
+                // End Call — sama rata dengan tombol lain
                 _GlassButton(
-                  icon: _cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
-                  label: _cameraOff ? 'Kamera On' : 'Kamera Off',
-                  isActive: _cameraOff, onTap: _toggleCamera,
+                  icon: Icons.call_end_rounded,
+                  label: 'Tutup',
+                  isEndCall: true,
+                  onTap: _endCall,
                 ),
-              if (!_isVideoMode)
-                _GlassButton(
-                  icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                  label: _speakerOn ? 'Speaker' : 'Earpiece',
-                  isActive: !_speakerOn, onTap: _toggleSpeaker,
-                ),
-              if (!_isVideoMode && _joined)
-                _GlassButton(
-                  icon: Icons.videocam_rounded,
-                  label: 'Video',
-                  onTap: _upgradeToVideo,
-                ),
-              if (_isVideoMode)
-                _GlassButton(
-                  icon: Icons.cameraswitch_rounded,
-                  label: 'Putar', onTap: _switchCamera,
-                ),
-              GestureDetector(
-                onTap: _endCall,
-                child: Container(
-                  width: 56, height: 56,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-                    ),
-                  ),
-                  child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 28),
-                ),
-              ),
-            ]),
+              ],
+            ),
           ),
         ),
       ),
@@ -661,11 +935,12 @@ class _GlassButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
+  final bool isEndCall;
   final VoidCallback onTap;
 
   const _GlassButton({
     required this.icon, required this.label,
-    this.isActive = false, required this.onTap,
+    this.isActive = false, this.isEndCall = false, required this.onTap,
   });
 
   @override
@@ -674,20 +949,34 @@ class _GlassButton extends StatelessWidget {
       onTap: onTap,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 48, height: 48,
+          width: 52, height: 52,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isActive
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white.withOpacity(0.08),
-            border: Border.all(color: Colors.white.withOpacity(0.15)),
+            // End Call → merah gradient, lainnya → glass transparan
+            gradient: isEndCall
+                ? const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)])
+                : null,
+            color: isEndCall
+                ? null
+                : isActive
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.08),
+            border: isEndCall
+                ? null
+                : Border.all(color: Colors.white.withOpacity(0.15)),
           ),
           child: Icon(icon,
-              color: isActive ? const Color(0xFFEF4444) : Colors.white, size: 22),
+              color: isEndCall
+                  ? Colors.white
+                  : isActive ? const Color(0xFFEF4444) : Colors.white,
+              size: 24),
         ),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(
-          color: Colors.white60, fontSize: 10)),
+        Text(label, style: TextStyle(
+          color: isEndCall ? const Color(0xFFEF4444) : Colors.white60,
+          fontSize: 10,
+          fontWeight: isEndCall ? FontWeight.w600 : FontWeight.w400,
+        )),
       ]),
     );
   }

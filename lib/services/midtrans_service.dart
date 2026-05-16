@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:midtrans_sdk/midtrans_sdk.dart';
 import '../config/api_config.dart';
 
@@ -19,10 +20,11 @@ class MidtransService {
 
   MidtransSDK? _midtrans;
   bool _isInitialized = false;
+  bool _isInitializing = false;
 
   /// Client Key Midtrans Sandbox (ganti dengan milik Anda)
   /// Untuk production, ganti prefix ke "Mid-client-xxx"
-  static const _clientKey = 'SB-Mid-client-xxxxxxxxxxxx'; // TODO: Ganti dengan Client Key Anda
+  static const _clientKey = 'SB-Mid-client-x5RmZ34A2KiPlLDz';
 
   /// Merchant Base URL — pointing ke Laravel API
   /// SDK membutuhkan ini untuk internal charge (opsional)
@@ -40,6 +42,10 @@ class MidtransService {
       }
       return;
     }
+
+    // Cegah concurrent init
+    if (_isInitializing) return;
+    _isInitializing = true;
 
     try {
       _midtrans = await MidtransSDK.init(
@@ -61,9 +67,17 @@ class MidtransService {
 
       _isInitialized = true;
       debugPrint('[MidtransService] SDK berhasil diinisialisasi');
+    } on PlatformException catch (e) {
+      // Native Android SDK gagal load (ClassNotFoundException, dll)
+      debugPrint('[MidtransService] PlatformException saat init SDK: $e');
+      _isInitialized = false;
+      rethrow; // biarkan caller handle
     } catch (e) {
       debugPrint('[MidtransService] Gagal inisialisasi SDK: $e');
       _isInitialized = false;
+      rethrow; // biarkan caller handle
+    } finally {
+      _isInitializing = false;
     }
   }
 

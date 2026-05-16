@@ -84,48 +84,31 @@ class ChatService {
             _errorCount = 0;
           }
 
-          // ✅ KUNCI FIX ANDROID: Saat Pusher berhasil reconnect,
-          // subscribe ulang SEMUA channel yang sebelumnya aktif.
-          if (state == 'CONNECTED' && _subscribedChannels.isNotEmpty) {
-            final channels = Set<String>.from(_subscribedChannels);
-            for (final ch in channels) {
-              try {
-                _pusher.subscribe(channelName: ch);
-                if (kDebugMode) debugPrint('[Pusher] Re-subscribed to $ch after reconnect');
-              } catch (e) {
-                debugPrint('[Pusher] Re-subscribe error for $ch: $e');
-              }
-            }
-          }
+          // Catatan: Pusher SDK secara otomatis melakukan re-subscribe ke channel yang 
+          // sebelumnya aktif saat status berubah menjadi 'CONNECTED'. 
+          // Menghapus blok subscribe manual di sini untuk mencegah error "Already subscribed".
         },
         onError: (msg, code, e) {
-          // Batasi log error agar tidak membanjiri console
           _errorCount++;
           if (_errorCount <= 2) {
             debugPrint('[Pusher] Error #$_errorCount: $msg ($code)');
           }
-          // Diam-diam setelah 2 error — Pusher sudah auto-reconnect sendiri
         },
       );
 
       // ── Retry connect dengan exponential backoff ──
-      // Library pusher kadang gagal pada connect() pertama di emulator,
-      // jadi kita coba beberapa kali dengan jeda yang makin lama.
       bool connected = false;
       for (int attempt = 1; attempt <= 5; attempt++) {
         try {
           await _pusher.connect();
-          // Tunggu sebentar untuk cek apakah benar-benar tersambung
           await Future.delayed(Duration(seconds: attempt));
           if (_lastConnectionState == 'CONNECTED') {
             connected = true;
             break;
           }
-          debugPrint('[Pusher] Attempt $attempt: state=$_lastConnectionState, retrying...');
         } catch (e) {
           debugPrint('[Pusher] Connect attempt $attempt failed: $e');
         }
-        // Tunggu sebelum retry berikutnya (2s, 4s, 8s, 16s, 32s)
         await Future.delayed(Duration(seconds: attempt * 2));
       }
 
@@ -138,7 +121,6 @@ class ChatService {
     } catch (e) {
       debugPrint('[Pusher] Critical Init Error: $e');
     } finally {
-      // Selesai init — buka kunci agar caller lain bisa lanjut
       _initCompleter?.complete();
       _initCompleter = null;
     }
@@ -175,14 +157,20 @@ class ChatService {
     final channelName = 'chat.$roomId';
     initPusher();
     
-    // Subscribe sekali saja ke channel ini
+    // Subscribe hanya jika belum ada di daftar langganan kita
     if (!_subscribedChannels.contains(channelName)) {
-      _pusher.subscribe(channelName: channelName);
-      _subscribedChannels.add(channelName);
-      if (kDebugMode) debugPrint('[Pusher] Subscribed to $channelName');
+      try {
+        _pusher.subscribe(channelName: channelName);
+        _subscribedChannels.add(channelName);
+        if (kDebugMode) debugPrint('[Pusher] Subscribed to $channelName');
+      } catch (e) {
+        if (e.toString().contains('Already subscribed')) {
+          _subscribedChannels.add(channelName);
+        }
+        debugPrint('[Pusher] Subscribe error: $e');
+      }
     }
 
-    // Return a filtered, deduplicated stream from the global broadcaster
     return _globalEventController.stream
         .where((event) => event.channelName == channelName)
         .where((event) => event.eventName == 'MessageSent' || event.eventName == 'App\\Events\\MessageSent')
@@ -206,9 +194,15 @@ class ChatService {
     initPusher();
     
     if (!_subscribedChannels.contains(channelName)) {
-      _pusher.subscribe(channelName: channelName);
-      _subscribedChannels.add(channelName);
-      if (kDebugMode) debugPrint('[Pusher] Subscribed to $channelName');
+      try {
+        _pusher.subscribe(channelName: channelName);
+        _subscribedChannels.add(channelName);
+        if (kDebugMode) debugPrint('[Pusher] Subscribed to $channelName');
+      } catch (e) {
+        if (e.toString().contains('Already subscribed')) {
+          _subscribedChannels.add(channelName);
+        }
+      }
     }
 
     return _globalEventController.stream
@@ -264,7 +258,7 @@ class ChatService {
     try {
       await _dio.post('/api/rooms/delete', data: {
         'room_id': roomId,
-        'type': type, // 'me' atau 'everyone'
+        'type': type, 
       });
     } catch (e) { debugPrint('DeleteRoom Error: $e'); }
   }
@@ -348,11 +342,11 @@ class ChatService {
   Future<void> sendCallSignal({
     required String receiverId,
     required String channelName,
-    required String signalType, // 'decline', 'cancel', 'end'
+    required String signalType,
   }) async {
     try {
       await _dio.post('/api/agora/signal', data: {
-        'receiver_id': receiverId,
+        'target_id': receiverId,
         'channel_name': channelName,
         'signal_type': signalType,
       });

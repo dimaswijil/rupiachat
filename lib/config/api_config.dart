@@ -13,6 +13,7 @@
 
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
@@ -32,11 +33,23 @@ class ApiConfig {
   /// Base URL yang aktif (diisi saat init)
   static String _baseUrl = 'http://localhost:$port';
 
+  /// --- KONFIGURASI NGROK ---
+  static const bool useNgrok = true; // Set false jika ingin kembali pakai IP Lokal (Auto-Discovery)
+  static const String ngrokUrl = 'https://cleaver-tadpole-wikipedia.ngrok-free.dev'; // Masukkan URL Ngrok kamu di sini
+  /// -------------------------
+
   /// Getter untuk base URL
   static String get baseUrl => _baseUrl;
 
   /// Inisialisasi — panggil di main() sebelum runApp
   static Future<void> init() async {
+    // 0. Cek apakah menggunakan Ngrok
+    if (useNgrok) {
+      _baseUrl = ngrokUrl;
+      print('✅ Menggunakan URL Ngrok publik: $_baseUrl');
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
 
     // 1. Coba IP terakhir yang berhasil (paling cepat)
@@ -45,6 +58,12 @@ class ApiConfig {
       _baseUrl = 'http://$cachedIp:$port';
       print('✅ Server ditemukan di cached IP: $cachedIp');
       return;
+    }
+
+    // Cached IP gagal → hapus cache basi agar tidak dipakai lagi
+    if (cachedIp != null) {
+      print('⚠️ Cached IP $cachedIp sudah tidak valid, menghapus cache...');
+      await prefs.remove(_cacheKey);
     }
 
     // 2. Coba semua known IPs secara parallel
@@ -76,11 +95,8 @@ class ApiConfig {
       }
     }
 
-    // 4. Fallback: pakai cached IP atau known IP pertama
-    if (cachedIp != null) {
-      _baseUrl = 'http://$cachedIp:$port';
-      print('⚠️ Server tidak ditemukan, pakai cached IP: $cachedIp');
-    } else if (_knownServerIps.isNotEmpty) {
+    // 4. Fallback: pakai known IP pertama
+    if (_knownServerIps.isNotEmpty) {
       _baseUrl = 'http://${_knownServerIps.first}:$port';
       print('⚠️ Server tidak ditemukan, pakai known IP: ${_knownServerIps.first}');
     } else {
@@ -89,6 +105,9 @@ class ApiConfig {
   }
 
   /// Cek apakah server bisa diakses di IP tertentu
+  /// PENTING: Harus verifikasi response body, bukan hanya status code!
+  /// Kalau hanya cek status 200-499, server lain di jaringan (yang return 401/404)
+  /// bisa salah dianggap sebagai server Laravel → cached IP salah.
   static Future<bool> _isServerReachable(String ip) async {
     try {
       final client = HttpClient();
@@ -97,8 +116,18 @@ class ApiConfig {
           .getUrl(Uri.parse('http://$ip:$port/api/ping'))
           .timeout(const Duration(seconds: 4));
       final response = await request.close().timeout(const Duration(seconds: 4));
+      
+      // Baca response body dan verifikasi isinya
+      final body = await response.transform(utf8.decoder).join();
       client.close();
-      return response.statusCode >= 200 && response.statusCode < 500;
+      
+      // Hanya return true jika response berisi {"status":"ok"}
+      // Ini memastikan benar-benar server Laravel kita, bukan server lain
+      final isOurServer = response.statusCode == 200 && body.contains('"status"') && body.contains('"ok"');
+      if (!isOurServer) {
+        print('❌ $ip:$port bukan server Laravel kita (status=${response.statusCode}, body=${body.substring(0, body.length.clamp(0, 100))})');
+      }
+      return isOurServer;
     } catch (_) {
       return false;
     }

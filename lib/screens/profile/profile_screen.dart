@@ -172,14 +172,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        body: SingleChildScrollView(
-          child: Column(children: [
+        body: Column(
+          children: [
             Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [RupiaColors.primary, Color(0xFF2557B3)],
+                  colors: [RupiaColors.primary, RupiaColors.primary],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               padding: const EdgeInsets.fromLTRB(0, 16, 0, 32),
               child: Center(
@@ -284,70 +291,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ]),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(20),
-              child: Column(children: [
-                _MenuItem(
-                  icon: Icons.person_outline, 
-                  label: 'Akun',
-                  onTap: () async {
-                    final updated = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditProfileScreen(
-                          currentName: _name,
-                          currentEmail: _email,
-                          currentPhone: _phone,
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: isDarkMode ? RupiaColors.bgDark : RupiaColors.bg,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+                    child: Column(children: [
+                      _MenuItem(
+                        icon: Icons.person_outline, 
+                        label: 'Akun',
+                        onTap: () async {
+                          final updated = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditProfileScreen(
+                                currentName: _name,
+                                currentEmail: _email,
+                                currentPhone: _phone,
+                              ),
+                            ),
+                          );
+                          if (updated == true) {
+                            _loadProfile();
+                          }
+                        },
+                      ),
+                      _MenuTile(
+                        icon: Icons.palette_outlined,
+                        label: 'Penampilan',
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_isDark ? 'Mode Gelap' : 'Mode Terang', 
+                              style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white54 : RupiaColors.textSecondary)),
+                            const SizedBox(width: 8),
+                            Switch(
+                              value: _isDark,
+                              activeColor: RupiaColors.primary,
+                              onChanged: _toggleTheme,
+                            ),
+                          ],
                         ),
                       ),
-                    );
-                    if (updated == true) {
-                      _loadProfile();
-                    }
-                  },
-                ),
-                _MenuTile(
-                  icon: Icons.palette_outlined,
-                  label: 'Penampilan',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_isDark ? 'Mode Gelap' : 'Mode Terang', 
-                        style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white54 : RupiaColors.textSecondary)),
-                      const SizedBox(width: 8),
-                      Switch(
-                        value: _isDark,
-                        activeColor: RupiaColors.primary,
-                        onChanged: _toggleTheme,
+                      const SizedBox(height: 8),
+                      _MenuItem(
+                        icon: Icons.security, 
+                        label: 'Keamanan',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityScreen())),
                       ),
-                    ],
+                      _MenuItem(
+                        icon: Icons.notifications_outlined, 
+                        label: 'Notifikasi',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
+                      ),
+                      _MenuItem(
+                        icon: Icons.help_outline, 
+                        label: 'Bantuan',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen())),
+                      ),
+                      _MenuItem(
+                        icon: Icons.logout, 
+                        label: 'Keluar', 
+                        isRed: true, 
+                        onTap: _logout
+                      ),
+                    ]),
                   ),
                 ),
-                const SizedBox(height: 8),
-                _MenuItem(
-                  icon: Icons.security, 
-                  label: 'Keamanan',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityScreen())),
-                ),
-                _MenuItem(
-                  icon: Icons.notifications_outlined, 
-                  label: 'Notifikasi',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
-                ),
-                _MenuItem(
-                  icon: Icons.help_outline, 
-                  label: 'Bantuan',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen())),
-                ),
-                _MenuItem(
-                  icon: Icons.logout, 
-                  label: 'Keluar', 
-                  isRed: true, 
-                  onTap: _logout
-                ),
-              ]),
             ),
-          ]),
+          ],
         ),
       ),
     );

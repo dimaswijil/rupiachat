@@ -10,6 +10,8 @@ import '../screens/call/incoming_call_screen.dart';
 import '../screens/chat/chat_room_screen.dart';
 import '../screens/group/group_chat_screen.dart';
 import '../services/chat_service.dart';
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'package:flutter_callkit_incoming/entities/entities.dart';
 
 /// Service yang menangani SEMUA FCM messages:
 /// - Panggilan masuk (incoming_call, incoming_group_call, call_signal)
@@ -129,7 +131,86 @@ class CallNotificationService {
       });
     }
 
+    // 4. CALLKIT LISTENER (Penting untuk notif panggilan layar penuh)
+    FlutterCallkitIncoming.onEvent.listen((CallEvent? event) {
+      if (event == null) return;
+      final body = event.body;
+      
+      switch (event.event) {
+        case Event.actionCallAccept:
+          if (body['extra'] != null) {
+            final data = Map<String, dynamic>.from(body['extra']);
+            // Arahkan otomatis ke layar panggilan saat di-accept!
+            Future.delayed(const Duration(seconds: 1), () {
+              if (data['type'] == 'incoming_group_call') {
+                 _showIncomingCall(
+                  callerName: data['caller_name'] ?? 'Unknown',
+                  callerId: data['caller_id'] ?? '',
+                  channelName: data['channel_name'] ?? '',
+                  callType: data['call_type'] ?? 'voice',
+                  callerPhoto: data['caller_photo'],
+                  isGroupCall: true,
+                  groupId: data['group_id'],
+                  groupName: data['group_name'],
+                );
+              } else {
+                 _showIncomingCall(
+                  callerName: data['caller_name'] ?? 'Unknown',
+                  callerId: data['caller_id'] ?? '',
+                  channelName: data['channel_name'] ?? '',
+                  callType: data['call_type'] ?? 'voice',
+                  callerPhoto: data['caller_photo'],
+                );
+              }
+            });
+          }
+          break;
+        case Event.actionCallDecline:
+          if (body['extra'] != null) {
+             // Jika dibutuhkan, bisa kirim signal 'decline' ke backend dari sini
+             final data = Map<String, dynamic>.from(body['extra']);
+             debugPrint('Panggilan ditolak lewat CallKit: ${data['channel_name']}');
+             _handleCallDeclineFromCallKit(data);
+          }
+          break;
+        case Event.actionCallEnded:
+        case Event.actionCallTimeout:
+           // do nothing
+           break;
+        default:
+          break;
+      }
+    });
+
     if (kDebugMode) debugPrint('[Notif] ✅ Service initialized');
+  }
+
+  // Handle ketika decline dari native UI
+  void _handleCallDeclineFromCallKit(Map<String, dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      if (token == null) return;
+      
+      final chatService = ChatService();
+      chatService.setToken(token);
+
+      await chatService.sendCallSignal(
+        receiverId: data['caller_id'] ?? '',
+        channelName: data['channel_name'] ?? '',
+        signalType: 'decline',
+      );
+
+      await chatService.saveCallLog(
+        receiverId: data['caller_id'] ?? '',
+        channelName: data['channel_name'] ?? '',
+        type: data['call_type'] ?? 'voice',
+        status: 'declined',
+        duration: 0,
+      );
+    } catch (e) {
+      debugPrint('[IncomingCall] Error decline dari callkit: $e');
+    }
   }
 
   // ══════════════════════════════════════════════════════════

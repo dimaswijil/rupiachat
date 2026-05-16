@@ -32,7 +32,7 @@ class _GroupCallScreenState extends State<GroupCallScreen>
   bool _isVideoMode = false;
   bool _muted = false;
   bool _cameraOff = false;
-  bool _speakerOn = true;
+  late bool _speakerOn;
   bool _isEnding = false;
 
   // Remote users — Agora assigns each a unique uid
@@ -48,6 +48,7 @@ class _GroupCallScreenState extends State<GroupCallScreen>
   void initState() {
     super.initState();
     _isVideoMode = widget.isVideoCall;
+    _speakerOn = widget.isVideoCall;
     _pulseController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
@@ -73,6 +74,48 @@ class _GroupCallScreenState extends State<GroupCallScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('⚠️ Agora APP ID belum diisi'), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+
+    // ── Request auth token & uid ──
+    final authToken = await AuthService().currentToken;
+    final currentUid = await AuthService().currentUid;
+
+    if (authToken == null || currentUid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ Sesi login tidak ditemukan'), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+
+    // ── Request Agora RTC token dari server ──
+    final channelId = 'group_${widget.channelName}';
+    final agoraUid = int.tryParse(currentUid) ?? 0;
+    String agoraToken = '';
+
+    try {
+      final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+      dio.options.headers['Authorization'] = 'Bearer $authToken';
+      dio.options.headers['Accept'] = 'application/json';
+
+      final tokenRes = await dio.post('/api/agora/token', data: {
+        'channel_name': channelId,
+        'uid': currentUid,
+      });
+
+      agoraToken = tokenRes.data['token'] ?? '';
+      debugPrint('✅ Agora group token diterima: ${agoraToken.substring(0, 20)}...');
+    } catch (e) {
+      debugPrint('❌ Gagal request Agora group token: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mendapatkan token panggilan grup: $e'), backgroundColor: Colors.red),
         );
         Navigator.pop(context);
       }
@@ -124,14 +167,20 @@ class _GroupCallScreenState extends State<GroupCallScreen>
       await _engine.disableVideo();
     }
 
+    await _engine.setDefaultAudioRouteToSpeakerphone(_speakerOn);
     await _engine.setEnableSpeakerphone(_speakerOn);
 
-    // Use group_ prefix for channel to avoid conflicts with 1-on-1 calls
+    // Join channel dengan token dari server (bukan empty string)
     await _engine.joinChannel(
-      token: '',
-      channelId: 'group_${widget.channelName}',
-      uid: 0,
-      options: const ChannelMediaOptions(),
+      token: agoraToken,
+      channelId: channelId,
+      uid: agoraUid,
+      options: const ChannelMediaOptions(
+        publishCameraTrack: true,
+        publishMicrophoneTrack: true,
+        autoSubscribeVideo: true,
+        autoSubscribeAudio: true,
+      ),
     );
   }
 
@@ -491,9 +540,9 @@ class _GroupCallScreenState extends State<GroupCallScreen>
               onTap: _toggleCamera,
             ),
           _buildControlBtn(
-            icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+            icon: _speakerOn ? Icons.volume_up_rounded : Icons.volume_down_rounded,
             label: _speakerOn ? 'Speaker' : 'Earpiece',
-            active: false,
+            active: _speakerOn,
             onTap: _toggleSpeaker,
           ),
           // End call button

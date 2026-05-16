@@ -56,6 +56,7 @@ class WalletService {
     }
   }
 
+  /// Ambil saldo wallet user yang sedang login
   Future<double> getBalance() async {
     try {
       await _ensureToken();
@@ -79,6 +80,48 @@ class WalletService {
     } catch (e) {
       debugPrint('Top Up Error: $e');
       return null;
+    }
+  }
+
+  /// Transfer saldo ke user lain
+  /// [receiverId] = ID user penerima (dari daftar users)
+  /// [amount] = jumlah transfer (min Rp 1.000)
+  /// Return: {'success': true, 'balance': 123000} atau {'success': false, 'error': '...'}
+  Future<Map<String, dynamic>> transfer({
+    required String receiverId,
+    required double amount,
+  }) async {
+    try {
+      await _ensureToken();
+      final response = await _dio.post('/api/wallet/transfer', data: {
+        'receiver_id': receiverId,
+        'amount': amount,
+      });
+      return {
+        'success': true,
+        'balance': double.parse(response.data['balance'].toString()),
+        'message': response.data['message'] ?? 'Transfer berhasil',
+      };
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message'] ?? 'Gagal transfer';
+      return {'success': false, 'error': msg};
+    } catch (e) {
+      debugPrint('Transfer Error: $e');
+      return {'success': false, 'error': 'Terjadi kesalahan'};
+    }
+  }
+
+  /// Ambil riwayat transaksi wallet (top up, transfer masuk, transfer keluar)
+  /// Return list of maps: [{id, amount, type, status, description, reference_user_name, created_at}, ...]
+  Future<List<Map<String, dynamic>>> getHistory() async {
+    try {
+      await _ensureToken();
+      final response = await _dio.get('/api/wallet/history');
+      final List<dynamic> data = response.data['transactions'] ?? [];
+      return data.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('History Error: $e');
+      return [];
     }
   }
 }

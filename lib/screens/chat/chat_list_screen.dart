@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:ui';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/group_service.dart';
@@ -343,28 +344,46 @@ class _ChatListScreenState extends State<_ChatListScreenContent> {
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [RupiaColors.primary, Color(0xFF2557B3)],
+                colors: [RupiaColors.primary, RupiaColors.primary],
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDarkMode ? RupiaColors.cardDark : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _filterUsers,
-                style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Cari kontak...',
-                  hintStyle: TextStyle(color: isDarkMode ? Colors.white54 : RupiaColors.textHint),
-                  prefixIcon: const Icon(Icons.search, color: RupiaColors.primary),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(isDarkMode ? 0.1 : 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _filterUsers,
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: 'Cari atau mulai chat baru',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -205,6 +205,9 @@ class AuthService {
       return null;
     } on DioException catch (e) {
       return _parseError(e);
+    } catch (e) {
+      debugPrint('Login error tidak terduga: $e');
+      return 'Terjadi kesalahan tidak terduga. Coba lagi.';
     }
   }
 
@@ -237,12 +240,37 @@ class AuthService {
   }
 
   String _parseError(DioException e) {
+    // Handle semua jenis timeout
     if (e.type == DioExceptionType.connectionTimeout) {
       return 'Koneksi ke server timeout. Pastikan Laravel sudah jalan.';
     }
-    if (e.response == null) return 'Tidak bisa terhubung ke server';
+    if (e.type == DioExceptionType.receiveTimeout) {
+      return 'Server terlalu lama merespons (receive timeout). Coba lagi.';
+    }
+    if (e.type == DioExceptionType.sendTimeout) {
+      return 'Gagal mengirim data ke server (send timeout). Cek koneksi internet.';
+    }
+    // Handle connection error (server unreachable, no internet, dll)
+    if (e.type == DioExceptionType.connectionError) {
+      return 'Tidak bisa terhubung ke server. Pastikan server Laravel jalan dan HP terhubung ke WiFi yang sama.';
+    }
+    // Handle cancel
+    if (e.type == DioExceptionType.cancel) {
+      return 'Permintaan dibatalkan.';
+    }
+    // Handle bad certificate
+    if (e.type == DioExceptionType.badCertificate) {
+      return 'Sertifikat server tidak valid.';
+    }
+    // Jika tidak ada response sama sekali (network error)
+    if (e.response == null) {
+      return 'Tidak bisa terhubung ke server. Pastikan server Laravel jalan.';
+    }
+    // Parse error message dari server response
     final data = e.response!.data;
-    if (data is Map<String, dynamic>) return data['message'] ?? 'Terjadi kesalahan';
-    return 'Terjadi kesalahan (${e.response?.statusCode})';
+    if (data is Map<String, dynamic>) {
+      return data['message'] ?? 'Terjadi kesalahan dari server (${e.response?.statusCode})';
+    }
+    return 'Terjadi kesalahan dari server (${e.response?.statusCode})';
   }
 }

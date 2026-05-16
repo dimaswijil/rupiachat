@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import '../../services/auth_service.dart';
 import '../../services/group_service.dart';
 import '../../models/group_model.dart';
@@ -106,56 +107,79 @@ class _GroupListScreenState extends State<GroupListScreen> {
         children: [
           // ── Search bar (sama persis dengan Chat List) ──
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [RupiaColors.primary, Color(0xFF2557B3)],
+                colors: [RupiaColors.primary, RupiaColors.primary],
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDarkMode ? RupiaColors.cardDark : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _filterGroups,
-                style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Cari grup...',
-                  hintStyle: TextStyle(color: isDarkMode ? Colors.white54 : RupiaColors.textHint),
-                  prefixIcon: const Icon(Icons.search, color: RupiaColors.primary),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(isDarkMode ? 0.1 : 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _filterGroups,
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: 'Cari grup...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
           // ── Content ──
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
-                : _filteredGroups.isEmpty
-                    ? _buildEmptyState(isDarkMode)
-                    : RefreshIndicator(
-                        onRefresh: _loadGroups,
-                        color: RupiaColors.primary,
-                        child: ListView.builder(
-                          itemCount: _filteredGroups.length,
-                          itemBuilder: (context, index) {
-                            final group = _filteredGroups[index];
-                            return Column(
-                              children: [
-                                _buildGroupTile(group, isDarkMode),
-                                Divider(indent: 72, height: 1, thickness: 0.5,
-                                    color: isDarkMode ? Colors.white10 : Colors.black12),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-          ),
+            child: Container(
+              color: isDarkMode ? RupiaColors.bgDark : RupiaColors.bg,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
+                  : _filteredGroups.isEmpty
+                      ? _buildEmptyState(isDarkMode)
+                      : RefreshIndicator(
+                              onRefresh: _loadGroups,
+                              color: RupiaColors.primary,
+                              child: ListView.builder(
+                                // Padding bawah agar item terakhir tidak tertutup floating navbar
+                                padding: const EdgeInsets.only(bottom: 100),
+                                itemCount: _filteredGroups.length,
+                                itemBuilder: (context, index) {
+                                  final group = _filteredGroups[index];
+                                  return Column(
+                                    children: [
+                                      _buildGroupTile(group, isDarkMode),
+                                      Divider(indent: 72, height: 1, thickness: 0.5,
+                                          color: isDarkMode ? Colors.white10 : Colors.black12),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                ),
+              ),
         ],
       ),
     );

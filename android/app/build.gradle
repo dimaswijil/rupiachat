@@ -11,6 +11,7 @@ android {
     ndkVersion = "26.1.10909125"
 
     compileOptions {
+        // Wajib untuk mendukung API Java 8+ di Android versi lama (minSdk 23)
         coreLibraryDesugaringEnabled true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -26,6 +27,9 @@ android {
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // MultiDex wajib karena app punya banyak dependency (Firebase, Midtrans, Agora, dll)
+        // Tanpa ini, class bisa tidak ditemukan di runtime (ClassNotFoundException)
+        multiDexEnabled true
     }
 
     buildTypes {
@@ -36,6 +40,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
+    // Mencegah error "Duplicate META-INF" saat build
+    packagingOptions {
+        exclude 'META-INF/NOTICE.md'
+        exclude 'META-INF/LICENSE.md'
+    }
 }
 
 flutter {
@@ -44,5 +54,10 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
-    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Gson — dibutuhkan oleh Midtrans SDK secara internal.
+    // HARUS pakai 'api' (bukan 'implementation') agar class Gson terlihat
+    // oleh semua module termasuk Midtrans plugin.
+    // Tanpa ini → crash: ClassNotFoundException: com.google.gson.internal.bind.DateTypeAdapter
+    api 'com.google.code.gson:gson:2.10.1'
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import '../../config/api_config.dart';
@@ -221,27 +222,45 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
         children: [
           // ── Search bar ──
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [RupiaColors.primary, Color(0xFF2557B3)],
+                colors: [RupiaColors.primary, RupiaColors.primary],
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? RupiaColors.cardDark : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextField(
-                onChanged: (q) => setState(() => _searchQuery = q),
-                style: TextStyle(color: isDark ? Colors.white : RupiaColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Cari panggilan...',
-                  hintStyle: TextStyle(color: isDark ? Colors.white54 : RupiaColors.textHint),
-                  prefixIcon: const Icon(Icons.search, color: RupiaColors.primary),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(isDark ? 0.1 : 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: TextField(
+                    onChanged: (q) => setState(() => _searchQuery = q),
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: 'Cari panggilan...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -249,26 +268,30 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
 
           // ── Call List ──
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
-                : filtered.isEmpty
-                    ? _buildEmptyState(isDark)
-                    : RefreshIndicator(
-                        onRefresh: _loadCallLogs,
-                        color: RupiaColors.primary,
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) => Column(
-                            children: [
-                              _buildCallTile(filtered[index], isDark),
-                              Divider(indent: 72, height: 1, thickness: 0.5,
-                                  color: isDark ? Colors.white10 : Colors.black12),
-                            ],
-                          ),
-                        ),
-                      ),
-          ),
+            child: Container(
+              color: isDark ? RupiaColors.bgDark : RupiaColors.bg,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
+                  : filtered.isEmpty
+                          ? _buildEmptyState(isDark)
+                          : RefreshIndicator(
+                              onRefresh: _loadCallLogs,
+                              color: RupiaColors.primary,
+                              child: ListView.builder(
+                                // Padding bawah agar item terakhir tidak tertutup floating navbar
+                                padding: const EdgeInsets.only(bottom: 100),
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) => Column(
+                                  children: [
+                                    _buildCallTile(filtered[index], isDark),
+                                    Divider(indent: 72, height: 1, thickness: 0.5,
+                                        color: isDark ? Colors.white10 : Colors.black12),
+                                  ],
+                                ),
+                              ),
+                            ),
+                ),
+              ),
         ],
       ),
     );

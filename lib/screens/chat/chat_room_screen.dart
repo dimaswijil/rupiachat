@@ -139,7 +139,31 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         roomId: widget.roomId,
         senderId: widget.currentUid,
         filePath: picked.path,
-      );
+      ).catchError((e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString())),
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _pickCameraImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
+    if (picked != null) {
+      widget.chatService.sendImage(
+        roomId: widget.roomId,
+        senderId: widget.currentUid,
+        filePath: picked.path,
+      ).catchError((e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString())),
+          );
+        }
+      });
     }
   }
 
@@ -204,9 +228,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           ),
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.call), onPressed: () => _startCall(isVideo: false)),
-          IconButton(icon: const Icon(Icons.videocam), onPressed: () => _startCall(isVideo: true)),
-          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.videocam_outlined, size: 26), 
+            onPressed: () => _startCall(isVideo: true)
+          ),
+          IconButton(
+            icon: const Icon(Icons.call_outlined, size: 24), 
+            onPressed: () => _startCall(isVideo: false)
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_vert, size: 26), 
+            onPressed: () {
+               ScaffoldMessenger.of(context).showSnackBar(
+                 const SnackBar(content: Text('Fitur opsi masih dalam pengembangan'), duration: Duration(seconds: 1))
+               );
+            }
+          ),
         ],
       ),
       body: Column(
@@ -220,7 +257,29 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isMe = msg.senderId == widget.currentUid;
-                return _MessageBubble(message: msg, isMe: isMe);
+                
+                // Cek apakah perlu menampilkan header tanggal (pesan paling atas di harinya)
+                bool showDate = false;
+                if (index == _messages.length - 1) {
+                  showDate = true; // Pesan terlama di list (paling atas di layar)
+                } else {
+                  final nextMsg = _messages[index + 1];
+                  if (!_isSameDay(msg.timestamp, nextMsg.timestamp)) {
+                    showDate = true;
+                  }
+                }
+                
+                Widget bubble = _MessageBubble(message: msg, isMe: isMe);
+                
+                if (showDate) {
+                  return Column(
+                    children: [
+                      _buildDateHeader(msg.timestamp),
+                      bubble,
+                    ],
+                  );
+                }
+                return bubble;
               },
             ),
           ),
@@ -230,47 +289,206 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    final d1 = date1.toLocal();
+    final d2 = date2.toLocal();
+    return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+  }
+
+  Widget _buildDateHeader(DateTime date) {
+    final now = DateTime.now();
+    final localTime = date.toLocal();
+    final today = DateTime(now.year, now.month, now.day);
+    final msgDay = DateTime(localTime.year, localTime.month, localTime.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    
+    String dateStr;
+    if (msgDay == today) {
+      dateStr = 'Hari ini';
+    } else if (msgDay == yesterday) {
+      dateStr = 'Kemarin';
+    } else if (now.difference(localTime).inDays < 7) {
+      const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+      dateStr = days[localTime.weekday - 1];
+    } else {
+      dateStr = "${localTime.day}/${localTime.month}/${localTime.year}";
+    }
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.dark 
+              ? Colors.white.withOpacity(0.12)
+              : Colors.black.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          dateStr,
+          style: TextStyle(
+            color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : const Color(0xFF555555), 
+            fontSize: 12, 
+            fontWeight: FontWeight.w600
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildInputArea(bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark ? RupiaColors.cardDark : Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
-      ),
+      color: Colors.transparent,
       child: SafeArea(
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline, color: RupiaColors.primary),
-              onPressed: _pickImage,
-            ),
             Expanded(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: isDark ? RupiaColors.bgDark : Colors.grey[100],
+                  color: isDark ? const Color(0xFF2B2B2B) : Colors.white,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: TextField(
-                  controller: _messageController,
-                  onChanged: _onTyping,
-                  style: TextStyle(color: isDark ? Colors.white : RupiaColors.textPrimary),
-                  decoration: const InputDecoration(
-                    hintText: 'Ketik pesan...',
-                    border: InputBorder.none,
-                  ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.emoji_emotions_outlined, color: Colors.grey[500]),
+                      onPressed: () {},
+                    ),
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 120),
+                        child: TextField(
+                          controller: _messageController,
+                          onChanged: _onTyping,
+                          style: TextStyle(color: isDark ? Colors.white : RupiaColors.textPrimary),
+                          maxLines: null,
+                          textInputAction: TextInputAction.newline,
+                          decoration: InputDecoration(
+                            hintText: 'Ketik pesan',
+                            hintStyle: TextStyle(color: Colors.grey[500]),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.attach_file, color: Colors.grey[500]),
+                      onPressed: () => _showAttachmentMenu(context, isDark),
+                    ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _messageController,
+                      builder: (context, value, child) {
+                        if (value.text.isEmpty) {
+                          return IconButton(
+                            icon: Icon(Icons.camera_alt, color: Colors.grey[500]),
+                            onPressed: _pickCameraImage,
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(color: RupiaColors.primary, shape: BoxShape.circle),
-                child: const Icon(Icons.send, color: Colors.white, size: 20),
-              ),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _messageController,
+              builder: (context, value, child) {
+                final isTyping = value.text.isNotEmpty;
+                return GestureDetector(
+                  onTap: isTyping ? _sendMessage : null, // Voice note feature can be implemented later
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      color: RupiaColors.primary, // RupiaChat Blue
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isTyping ? Icons.send : Icons.mic, 
+                      color: Colors.white, 
+                      size: 22,
+                    ),
+                  ),
+                );
+              },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAttachmentMenu(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF161F24) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 16,
+          runSpacing: 20,
+          children: [
+            _buildAttachmentItem(ctx, icon: Icons.image, color: Colors.blueAccent, label: 'Galeri', isDev: false, onTap: () {
+               Navigator.pop(ctx);
+               Future.delayed(const Duration(milliseconds: 200), _pickImage);
+            }),
+            _buildAttachmentItem(ctx, icon: Icons.camera_alt, color: Colors.pinkAccent, label: 'Kamera', isDev: false, onTap: () {
+               Navigator.pop(ctx);
+               Future.delayed(const Duration(milliseconds: 200), _pickCameraImage);
+            }),
+            _buildAttachmentItem(ctx, icon: Icons.location_on, color: Colors.green, label: 'Lokasi', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.person, color: Colors.lightBlue, label: 'Kontak', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.insert_drive_file, color: Colors.deepPurpleAccent, label: 'Dokumen', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.headphones, color: Colors.orange, label: 'Audio', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.bar_chart, color: Colors.amber, label: 'Polling', isDev: true),
+            _buildAttachmentItem(ctx, icon: Icons.event, color: Colors.redAccent, label: 'Acara', isDev: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachmentItem(BuildContext context, {required IconData icon, required Color color, required String label, required bool isDev, VoidCallback? onTap}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: () {
+        if (isDev) {
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label masih dalam pengembangan'), duration: const Duration(seconds: 1)));
+        } else {
+           if (onTap != null) onTap();
+        }
+      },
+      child: SizedBox(
+        width: 70,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF252A30) : Colors.grey[50],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 6),
+            Text(label, style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12), textAlign: TextAlign.center),
+            if (isDev)
+              Text('Dev', style: const TextStyle(color: RupiaColors.primary, fontSize: 9, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
           ],
         ),
       ),

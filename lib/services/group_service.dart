@@ -272,10 +272,16 @@ class GroupService {
       FormData formData = FormData.fromMap({
         'photo': await MultipartFile.fromFile(filePath, filename: fileName),
       });
+      final token = _dio.options.headers['Authorization'];
       final response = await _dio.post(
         '/api/groups/$groupId/photo',
         data: formData,
-        options: Options(contentType: 'multipart/form-data'),
+        options: Options(
+          contentType: 'multipart/form-data',
+          headers: {'Authorization': token},
+          sendTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
       );
       return response.data['photo_url'];
     } catch (e) {
