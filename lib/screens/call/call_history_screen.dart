@@ -134,7 +134,12 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
       final otherUserName = call['other_user_name']?.toString() ?? 'Unknown';
       if (otherUserId.isEmpty) return;
       if (!mounted) return;
-      final channelName = 'call_${uid}_$otherUserId';
+      // FIXED Bug #11: Generate channel name BARU setiap re-call
+      // Pakai channel lama bisa collision jika Agora channel belum expire (timeout ~5 menit)
+      // Format: call_{smallerUid}_{largerUid}_{timestamp}
+      final sortedIds = [uid, otherUserId]..sort();
+      final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final channelName = 'call_${sortedIds[0]}_${sortedIds[1]}_$timestamp';
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => CallScreen(
           channelName: channelName,

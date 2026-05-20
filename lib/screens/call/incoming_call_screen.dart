@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'call_screen.dart';
+import 'group_call_screen.dart';
 import '../../services/chat_service.dart';
 import '../../services/auth_service.dart';
 
@@ -93,29 +94,45 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     _isResponded = true;
     _autoDeclineTimer?.cancel();
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CallScreen(
-          channelName: widget.channelName,
-          otherUserName: widget.callerName,
-          otherUserId: widget.callerId,
-          otherUserPhoto: widget.callerPhoto,
-          isVideoCall: widget.callType == 'video',
-          isIncoming: true,
+    if (widget.isGroupCall) {
+      // Group call → arahkan ke GroupCallScreen agar channel prefix konsisten
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GroupCallScreen(
+            channelName: widget.channelName,
+            groupName: widget.groupName ?? widget.callerName,
+            isVideoCall: widget.callType == 'video',
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            channelName: widget.channelName,
+            otherUserName: widget.callerName,
+            otherUserId: widget.callerId,
+            otherUserPhoto: widget.callerPhoto,
+            isVideoCall: widget.callType == 'video',
+            isIncoming: true,
+          ),
+        ),
+      );
+    }
   }
 
-  void _declineCall() {
+  // FIXED Bug #19: await decline signal SEBELUM pop
+  // Tanpa ini, app bisa di-kill OS sebelum sinyal terkirim → caller stuck di 'ringing'
+  void _declineCall() async {
     if (_isResponded) return;
     _isResponded = true;
     _autoDeclineTimer?.cancel();
 
-    _sendDeclineSignal();
+    await _sendDeclineSignal();
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _sendDeclineSignal() async {

@@ -40,7 +40,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   bool _isEngineInitialized = false;
   bool _joined = false;
   bool _remoteUserJoined = false;
-  bool _remoteVideoReady = false;
+  // FIXED: Hapus _remoteVideoReady sebagai gate render — cukup cek _remoteUid != null
+  // Dulu: remote video tidak pernah tampil jika onRemoteVideoStateChanged tidak ter-fire
+  bool _remoteVideoActive = false;   // true = video sedang stream (bukan frozen/stopped)
   bool _isRemoteVideoFrozen = false;
   int? _remoteUid;
   bool _muted = false;
@@ -157,7 +159,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         }
         return;
       }
-      debugPrint('✅ Agora token diterima: ${agoraToken.substring(0, 20)}...');
+      debugPrint('✅ Agora token diterima: ${agoraToken.substring(0, agoraToken.length.clamp(0, 20))}...');
     } catch (e) {
       debugPrint('❌ Gagal request Agora token: $e');
       if (mounted) {
@@ -199,10 +201,16 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       if (_isEngineInitialized) return;
       
       _engine = createAgoraRtcEngine();
-      await _engine!.initialize(RtcEngineContext(
+      await _engine!.initialize(const RtcEngineContext(
         appId: agoraAppId,
-        channelProfile: ChannelProfileType.channelProfileCommunication,
+        // FIXED: channelProfileLiveBroadcasting agar clientRole Broadcaster aktif
+        // channelProfileCommunication mengabaikan role setting → video bisa blank
+        channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
       ));
+
+      // FIXED: Set client role sebagai Broadcaster agar bisa publish audio & video
+      // Tanpa ini, Agora v6 bisa default ke Audience yang tidak publish stream
+      await _engine!.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
     } catch (e) {
       debugPrint('❌ Gagal inisialisasi Agora Engine: $e');
       if (mounted) {
@@ -235,7 +243,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             });
             _ringbackPlayer.stop();
             _noAnswerTimer?.cancel();
-            _pulseController.stop();
+            try { _pulseController.stop(); } catch (_) {}
             _startTimer();
             _startHideControlsTimer();
           }
@@ -245,7 +253,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           if (mounted) {
             setState(() { 
               _remoteUserJoined = false; 
-              _remoteVideoReady = false;
+              _remoteVideoActive = false; // FIXED: renamed from _remoteVideoReady
               _remoteUid = null; 
             });
             _stopTimer();
@@ -255,17 +263,28 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           }
         },
         onRemoteVideoStateChanged: (RtcConnection connection, int remoteUid, RemoteVideoState state, RemoteVideoStateReason reason, int elapsed) {
-          debugPrint('📹 Remote video state: $state, reason: $reason');
+          debugPrint('📹 Remote video state uid=$remoteUid: $state, reason: $reason');
           if (mounted) {
             setState(() {
-              _isRemoteVideoFrozen = state == RemoteVideoState.remoteVideoStateFrozen;
-              
-              if (state == RemoteVideoState.remoteVideoStateStarting || 
-                  state == RemoteVideoState.remoteVideoStateDecoding) {
-                _remoteVideoReady = true;
-                _isRemoteVideoFrozen = false;
-              } else if (state == RemoteVideoState.remoteVideoStateStopped) {
-                _remoteVideoReady = false;
+              // FIXED: Logika state video yang lebih robust
+              // Dulu: hanya Starting/Decoding yang set ready — jika langsung Decoding bisa terlewat
+              switch (state) {
+                case RemoteVideoState.remoteVideoStateStarting:
+                case RemoteVideoState.remoteVideoStateDecoding:
+                  _remoteVideoActive = true;
+                  _isRemoteVideoFrozen = false;
+                  break;
+                case RemoteVideoState.remoteVideoStateFrozen:
+                  _isRemoteVideoFrozen = true;
+                  // Tetap _remoteVideoActive = true agar view tidak hilang
+                  break;
+                case RemoteVideoState.remoteVideoStateStopped:
+                case RemoteVideoState.remoteVideoStateFailed:
+                  _remoteVideoActive = false;
+                  _isRemoteVideoFrozen = false;
+                  break;
+                default:
+                  break;
               }
             });
           }
@@ -293,7 +312,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           }
         },
         onTokenPrivilegeWillExpire: (RtcConnection connection, String token) {
-          debugPrint('⚠️ Token akan expire!');
+          debugPrint('⚠️ Token akan expire — mencoba renew...');
+          _renewAgoraToken();
         },
       ),
     );
@@ -340,23 +360,27 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     debugPrint('🎯 App ID: $agoraAppId');
     debugPrint('🎯 Channel: ${widget.channelName}');
     debugPrint('🎯 UID: $agoraUid');
-    debugPrint('🎯 Token prefix: ${agoraToken.substring(0, 10)}...');
+    debugPrint('🎯 Token prefix: ${agoraToken.substring(0, agoraToken.length.clamp(0, 10))}...');
     debugPrint('🎯 Is Video: ${widget.isVideoCall}');
 
     try {
       if (!_joined) {
+        // FIXED: Jangan set _joined=true sebelum await — biarkan onJoinChannelSuccess yang set
+        // Ini mencegah state tidak konsisten jika joinChannel gagal silently
         await _engine!.joinChannel(
           token: agoraToken,
           channelId: widget.channelName,
           uid: agoraUid,
+          // clientRoleBroadcaster wajib agar bisa publish audio & video
           options: ChannelMediaOptions(
+            clientRoleType: ClientRoleType.clientRoleBroadcaster,
             publishCameraTrack: widget.isVideoCall,
             publishMicrophoneTrack: true,
             autoSubscribeVideo: true,
             autoSubscribeAudio: true,
           ),
         );
-        debugPrint('✅ joinChannel() berhasil');
+        debugPrint('✅ joinChannel() berhasil — isVideo: ${widget.isVideoCall}');
       }
     } catch (e) {
       debugPrint('❌ joinChannel() EXCEPTION: $e');
@@ -377,7 +401,37 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     });
   }
 
-  
+  /// Request token baru dari backend dan renew di engine
+  /// Dipanggil oleh onTokenPrivilegeWillExpire agar panggilan tidak putus
+  Future<void> _renewAgoraToken() async {
+    if (_engine == null || !_isEngineInitialized) return;
+    try {
+      final authToken = await AuthService().currentToken;
+      if (authToken == null) return;
+
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ));
+      dio.options.headers['Authorization'] = 'Bearer $authToken';
+      dio.options.headers['Accept'] = 'application/json';
+
+      final tokenRes = await dio.post('/api/agora/token', data: {
+        'channel_name': widget.channelName,
+        'uid': '0',
+      });
+
+      final newToken = tokenRes.data['token'] ?? '';
+      if (newToken.isNotEmpty) {
+        await _engine!.renewToken(newToken);
+        debugPrint('✅ Agora token renewed successfully');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Gagal renew Agora token: $e');
+    }
+  }
+
   void _playRingbackTone() async {
     await _ringbackPlayer.setReleaseMode(ReleaseMode.loop);
     await _ringbackPlayer.play(AssetSource('audio/ringback.wav'));
@@ -424,11 +478,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     if (_engine == null || !_isEngineInitialized) return;
     await _engine!.enableVideo();
     await _engine!.startPreview();
+    // FIXED: Tambah clientRoleType saat upgrade ke video agar publish camera track
     await _engine!.updateChannelMediaOptions(
       const ChannelMediaOptions(
+        clientRoleType: ClientRoleType.clientRoleBroadcaster,
         publishCameraTrack: true,
         publishMicrophoneTrack: true,
         autoSubscribeVideo: true,
+        autoSubscribeAudio: true,
       ),
     );
     setState(() {
@@ -444,11 +501,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _stopTimer();
     _noAnswerTimer?.cancel();
     _hideControlsTimer?.cancel();
+    try { _pulseController.stop(); } catch (_) {}
 
-    _saveCallLog();
+    await _saveCallLog();
 
+    // FIXED Bug #18: Fire-and-forget cancel signal agar tidak blokir end call
+    // Sebelumnya await bisa menunggu hingga 15 detik jika backend lambat
     if (!widget.isIncoming && !_remoteUserJoined) {
-      _sendCancelSignal();
+      _sendCancelSignal(); // intentionally not awaited
     }
 
     await _disposeAgora();
@@ -528,20 +588,34 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _hideControlsTimer?.cancel();
     _pulseController.dispose();
     _fadeController.dispose();
-    _disposeAgora(); // Aman dipanggil berkali-kali berkat guard _engine == null
+    // FIXED Bug #5: dispose() tidak bisa await, tapi _endCall() (yang SUDAH await
+    // _disposeAgora()) selalu dipanggil sebelum navigator pop.
+    // Di sini kita tangkap referensi engine lalu null-kan segera agar UI tidak akses,
+    // kemudian fire-and-forget cleanup yang sebenarnya.
+    final engineRef = _engine;
+    _engine = null;
+    _isEngineInitialized = false;
+    _engineReady = false;
+    if (engineRef != null) {
+      // Fire-and-forget — aman karena engine sudah di-null dari state
+      Future(() async {
+        try { await engineRef.leaveChannel(); } catch (_) {}
+        try { await engineRef.stopPreview(); } catch (_) {}
+        try { await engineRef.release(); } catch (_) {}
+      });
+    }
     _ringbackPlayer.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (!_isEnding) {
+    return PopScope(
+      canPop: _isEnding,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_isEnding) {
           _endCall();
-          return false;
         }
-        return true;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF0A0E21),
@@ -587,11 +661,13 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             controller: VideoViewController(
               rtcEngine: _engine!,
               canvas: const VideoCanvas(
-                uid: 0,
+                uid: 0, // FIXED: uid=0 = local user
                 renderMode: RenderModeType.renderModeHidden,
               ),
-              useFlutterTexture: false,
-              useAndroidSurfaceView: true,
+              // FIXED: useFlutterTexture=true lebih stabil di iOS & Android
+              // useAndroidSurfaceView menyebabkan blank di beberapa device
+              useFlutterTexture: true,
+              useAndroidSurfaceView: false,
             ),
           ),
         ),
@@ -602,21 +678,26 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     }
 
     return [
-      if (_remoteUid != null && _remoteVideoReady)
+      // FIXED: Remote video — tampilkan segera setelah remoteUid tersedia
+      // Dulu: hanya render jika _remoteVideoReady=true, tapi event bisa terlambat/tidak ter-fire
+      // Sekarang: render view segera, overlay indikator jika belum active
+      if (_remoteUid != null)
         Positioned.fill(
           child: AgoraVideoView(
             controller: VideoViewController.remote(
               rtcEngine: _engine!,
               canvas: VideoCanvas(
-                uid: _remoteUid!,
+                uid: _remoteUid!, // FIXED: uid dari onUserJoined — bukan 0
                 renderMode: RenderModeType.renderModeHidden,
               ),
               connection: RtcConnection(channelId: widget.channelName),
-              useFlutterTexture: false,
-              useAndroidSurfaceView: true,
+              // FIXED: Flutter texture lebih stabil cross-platform
+              useFlutterTexture: true,
+              useAndroidSurfaceView: false,
             ),
           ),
         ),
+      // Overlay: frozen indicator
       if (_isRemoteVideoFrozen)
         Positioned.fill(
           child: Container(
@@ -633,7 +714,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             ),
           ),
         )
-      else if (_remoteUid != null && !_remoteVideoReady)
+      // Overlay: menunggu video stream (sebelum _remoteVideoActive)
+      else if (_remoteUid != null && !_remoteVideoActive)
         Positioned.fill(
           child: Container(
             color: const Color(0xFF0A0E21),
@@ -649,6 +731,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             ),
           ),
         ),
+      // PiP: local camera (draggable)
       if (!_cameraOff)
         Positioned(
           top: _pipTop, right: _pipRight,
@@ -672,11 +755,11 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   controller: VideoViewController(
                     rtcEngine: _engine!,
                     canvas: const VideoCanvas(
-                      uid: 0,
+                      uid: 0, // FIXED: local = uid 0
                       renderMode: RenderModeType.renderModeHidden,
                     ),
-                    useFlutterTexture: false,
-                    useAndroidSurfaceView: true,
+                    useFlutterTexture: true,  // FIXED: texture lebih stabil
+                    useAndroidSurfaceView: false,
                   ),
                 ),
               ),

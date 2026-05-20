@@ -27,7 +27,10 @@ class GroupCallScreen extends StatefulWidget {
 
 class _GroupCallScreenState extends State<GroupCallScreen>
     with TickerProviderStateMixin {
-  late RtcEngine _engine;
+  // FIXED: Nullable engine — mencegah LateInitializationError jika init gagal
+  RtcEngine? _engine;
+  bool _engineReady = false;
+  bool _isEngineInitialized = false; // FIXED Bug #20: guard double-init
   bool _localJoined = false;
   bool _isVideoMode = false;
   bool _muted = false;
@@ -62,13 +65,37 @@ class _GroupCallScreenState extends State<GroupCallScreen>
   void dispose() {
     _timer?.cancel();
     _pulseController.dispose();
-    _engine.leaveChannel();
-    _engine.release();
+    // FIXED Bug #8: dispose() tidak bisa await. _endCall() (yang SUDAH await
+    // _disposeEngine()) selalu dipanggil sebelum navigator pop.
+    // Safety net: null-kan referensi segera, fire-and-forget cleanup.
+    final engineRef = _engine;
+    _engine = null;
+    _engineReady = false;
+    if (engineRef != null) {
+      Future(() async {
+        try { await engineRef.leaveChannel(); } catch (_) {}
+        try { await engineRef.stopPreview(); } catch (_) {}
+        try { await engineRef.release(); } catch (_) {}
+      });
+    }
     super.dispose();
+  }
+
+  Future<void> _disposeEngine() async {
+    if (_engine == null) return;
+    try { await _engine!.leaveChannel(); } catch (_) {}
+    try { await _engine!.stopPreview(); } catch (_) {}
+    try { await _engine!.release(); } catch (_) {}
+    _engine = null;
+    _engineReady = false;
+    _isEngineInitialized = false;
   }
 
   Future<void> _initAgora() async {
     await [Permission.microphone, Permission.camera].request();
+
+    // FIXED Bug #15: mounted check setelah async permission request
+    if (!mounted) return;
 
     if (_agoraAppId.isEmpty || _agoraAppId == 'YOUR_AGORA_APP_ID') {
       if (mounted) {
@@ -83,6 +110,9 @@ class _GroupCallScreenState extends State<GroupCallScreen>
     // ── Request auth token & uid ──
     final authToken = await AuthService().currentToken;
     final currentUid = await AuthService().currentUid;
+
+    // FIXED Bug #15: mounted check setelah async auth request
+    if (!mounted) return;
 
     if (authToken == null || currentUid == null) {
       if (mounted) {
@@ -100,7 +130,11 @@ class _GroupCallScreenState extends State<GroupCallScreen>
     String agoraToken = '';
 
     try {
-      final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ));
       dio.options.headers['Authorization'] = 'Bearer $authToken';
       dio.options.headers['Accept'] = 'application/json';
 
@@ -109,8 +143,22 @@ class _GroupCallScreenState extends State<GroupCallScreen>
         'uid': currentUid,
       });
 
+      if (!mounted) return;
+
       agoraToken = tokenRes.data['token'] ?? '';
-      debugPrint('✅ Agora group token diterima: ${agoraToken.substring(0, 20)}...');
+      // FIXED Bug #14: Cek token kosong sebelum lanjut
+      if (agoraToken.isEmpty) {
+        debugPrint('❌ Token grup kosong dari server');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Token panggilan grup kosong'), backgroundColor: Colors.red),
+          );
+          Navigator.pop(context);
+        }
+        return;
+      }
+      // FIXED Bug #13: substring dengan clamp agar tidak crash jika token pendek
+      debugPrint('✅ Agora group token diterima: ${agoraToken.substring(0, agoraToken.length.clamp(0, 20))}...');
     } catch (e) {
       debugPrint('❌ Gagal request Agora group token: $e');
       if (mounted) {
@@ -122,20 +170,45 @@ class _GroupCallScreenState extends State<GroupCallScreen>
       return;
     }
 
-    _engine = createAgoraRtcEngine();
-    await _engine.initialize(RtcEngineContext(
-      appId: _agoraAppId,
-      channelProfile: ChannelProfileType.channelProfileCommunication,
-    ));
+    if (!mounted) return;
 
-    _engine.registerEventHandler(RtcEngineEventHandler(
+    // ── Inisialisasi Agora Engine ──
+    try {
+      // FIXED Bug #20: guard double-init
+      if (_isEngineInitialized) return;
+
+      _engine = createAgoraRtcEngine();
+      await _engine!.initialize(const RtcEngineContext(
+        appId: _agoraAppId,
+        // FIXED: channelProfileLiveBroadcasting agar clientRole Broadcaster aktif
+        // channelProfileCommunication mengabaikan role setting → video bisa blank
+        channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
+      ));
+
+      // Set Broadcaster agar semua peserta bisa publish audio & video
+      // Tanpa ini di LiveBroadcasting profile, default = Audience (tidak publish)
+      await _engine!.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
+    } catch (e) {
+      debugPrint('❌ Gagal inisialisasi Agora Group Engine: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memulai engine panggilan: $e'), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+
+    _engine!.registerEventHandler(RtcEngineEventHandler(
       onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
         if (mounted) setState(() => _localJoined = true);
         _startTimer();
       },
       onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
+        debugPrint('✅ Group remote user joined: $remoteUid');
         if (mounted) {
           setState(() {
+            // FIXED: Inisialisasi hasVideo=false, update lewat onRemoteVideoStateChanged
             _remoteUsers[remoteUid] = false;
           });
         }
@@ -149,39 +222,92 @@ class _GroupCallScreenState extends State<GroupCallScreen>
       },
       onRemoteVideoStateChanged: (RtcConnection connection, int remoteUid,
           RemoteVideoState state, RemoteVideoStateReason reason, int elapsed) {
+        debugPrint('📹 Group remote video uid=$remoteUid state=$state');
         if (mounted) {
           setState(() {
-            _remoteUsers[remoteUid] = state == RemoteVideoState.remoteVideoStateDecoding;
+            // FIXED: Handle Starting + Decoding (dulu hanya Decoding — bisa terlewat)
+            switch (state) {
+              case RemoteVideoState.remoteVideoStateStarting:
+              case RemoteVideoState.remoteVideoStateDecoding:
+                _remoteUsers[remoteUid] = true;
+                break;
+              case RemoteVideoState.remoteVideoStateStopped:
+              case RemoteVideoState.remoteVideoStateFailed:
+                _remoteUsers[remoteUid] = false;
+                break;
+              default:
+                break;
+            }
           });
         }
       },
       onError: (ErrorCodeType err, String msg) {
-        debugPrint('Agora Error: $err - $msg');
+        debugPrint('Agora Group Error: $err - $msg');
+        // Handle token errors — tanpa ini group call diam-diam gagal
+        if (err == ErrorCodeType.errInvalidToken || err == ErrorCodeType.errTokenExpired) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Token panggilan grup invalid/expired'), backgroundColor: Colors.red),
+            );
+            _endCall();
+          }
+        }
+      },
+      onConnectionStateChanged: (RtcConnection c, ConnectionStateType s, ConnectionChangedReasonType r) {
+        debugPrint('🔄 Group Agora State: $s, Reason: $r');
+        if (s == ConnectionStateType.connectionStateFailed && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Koneksi panggilan grup gagal'), backgroundColor: Colors.red),
+          );
+          _endCall();
+        }
+      },
+      // FIXED Bug #17: Handle token expiry agar panggilan grup panjang tidak putus
+      onTokenPrivilegeWillExpire: (RtcConnection connection, String token) {
+        debugPrint('⚠️ Group token akan expire — mencoba renew...');
+        _renewGroupToken();
       },
     ));
 
     if (_isVideoMode) {
-      await _engine.enableVideo();
-      await _engine.startPreview();
+      await _engine!.enableVideo();
+      await _engine!.startPreview();
     } else {
-      await _engine.disableVideo();
+      await _engine!.disableVideo();
     }
 
-    await _engine.setDefaultAudioRouteToSpeakerphone(_speakerOn);
-    await _engine.setEnableSpeakerphone(_speakerOn);
+    await _engine!.setDefaultAudioRouteToSpeakerphone(_speakerOn);
+    await _engine!.setEnableSpeakerphone(_speakerOn);
 
-    // Join channel dengan token dari server (bukan empty string)
-    await _engine.joinChannel(
-      token: agoraToken,
-      channelId: channelId,
-      uid: agoraUid,
-      options: const ChannelMediaOptions(
-        publishCameraTrack: true,
-        publishMicrophoneTrack: true,
-        autoSubscribeVideo: true,
-        autoSubscribeAudio: true,
-      ),
-    );
+    _isEngineInitialized = true;
+    if (!mounted) { await _disposeEngine(); return; }
+    if (mounted) setState(() => _engineReady = true);
+
+    // ── Join Channel (dengan try-catch agar tidak crash) ──
+    try {
+      await _engine!.joinChannel(
+        token: agoraToken,
+        channelId: channelId,
+        uid: agoraUid,
+        options: ChannelMediaOptions(
+          clientRoleType: ClientRoleType.clientRoleBroadcaster,
+          publishCameraTrack: _isVideoMode,
+          publishMicrophoneTrack: true,
+          autoSubscribeVideo: true,
+          autoSubscribeAudio: true,
+        ),
+      );
+      debugPrint('✅ Group joinChannel() — channel=$channelId uid=$agoraUid isVideo=$_isVideoMode');
+    } catch (e) {
+      debugPrint('❌ Group joinChannel() EXCEPTION: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal bergabung ke panggilan grup: $e'), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
   }
 
   void _startTimer() {
@@ -199,25 +325,37 @@ class _GroupCallScreenState extends State<GroupCallScreen>
   }
 
   void _toggleMute() {
+    if (_engine == null || !_engineReady) return;
     setState(() => _muted = !_muted);
-    _engine.muteLocalAudioStream(_muted);
+    _engine!.muteLocalAudioStream(_muted);
   }
 
   void _toggleSpeaker() {
+    if (_engine == null || !_engineReady) return;
     setState(() => _speakerOn = !_speakerOn);
-    _engine.setEnableSpeakerphone(_speakerOn);
+    _engine!.setEnableSpeakerphone(_speakerOn);
   }
 
   void _toggleCamera() {
+    if (_engine == null || !_engineReady) return;
     setState(() => _cameraOff = !_cameraOff);
-    _engine.muteLocalVideoStream(_cameraOff);
+    _engine!.muteLocalVideoStream(_cameraOff);
   }
 
-  void _switchCamera() => _engine.switchCamera();
+  void _switchCamera() { if (_engine != null && _engineReady) _engine!.switchCamera(); }
 
   void _upgradeToVideo() async {
-    await _engine.enableVideo();
-    await _engine.startPreview();
+    if (_engine == null || !_engineReady) return;
+    await _engine!.enableVideo();
+    await _engine!.startPreview();
+    // FIXED: Update channel options saat upgrade ke video
+    await _engine!.updateChannelMediaOptions(const ChannelMediaOptions(
+      clientRoleType: ClientRoleType.clientRoleBroadcaster,
+      publishCameraTrack: true,
+      publishMicrophoneTrack: true,
+      autoSubscribeVideo: true,
+      autoSubscribeAudio: true,
+    ));
     setState(() {
       _isVideoMode = true;
       _cameraOff = false;
@@ -228,15 +366,46 @@ class _GroupCallScreenState extends State<GroupCallScreen>
     if (_isEnding) return;
     _isEnding = true;
     _timer?.cancel();
+    try { _pulseController.stop(); } catch (_) {}
     await _saveCallLog();
-    try {
-      await _engine.leaveChannel();
-      await _engine.release();
-    } catch (_) {}
+    await _disposeEngine();
     if (mounted) Navigator.pop(context);
   }
 
+  /// FIXED Bug #17: Renew token saat hampir expire agar group call panjang tidak putus
+  Future<void> _renewGroupToken() async {
+    if (_engine == null || !_isEngineInitialized) return;
+    try {
+      final authToken = await AuthService().currentToken;
+      final currentUid = await AuthService().currentUid;
+      if (authToken == null || currentUid == null) return;
+
+      final channelId = 'group_${widget.channelName}';
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ));
+      dio.options.headers['Authorization'] = 'Bearer $authToken';
+      dio.options.headers['Accept'] = 'application/json';
+
+      final tokenRes = await dio.post('/api/agora/token', data: {
+        'channel_name': channelId,
+        'uid': currentUid,
+      });
+
+      final newToken = tokenRes.data['token'] ?? '';
+      if (newToken.isNotEmpty) {
+        await _engine!.renewToken(newToken);
+        debugPrint('✅ Group Agora token renewed successfully');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Gagal renew group Agora token: $e');
+    }
+  }
+
   Future<void> _saveCallLog() async {
+    final channelId = 'group_${widget.channelName}';
     try {
       final token = await AuthService().currentToken;
       if (token == null) return;
@@ -246,7 +415,7 @@ class _GroupCallScreenState extends State<GroupCallScreen>
       await dio.post('/api/call-logs', data: {
         'group_id': widget.channelName,
         'group_name': widget.groupName,
-        'channel_name': 'group_${widget.channelName}',
+        'channel_name': channelId, // Konsisten dengan channelId saat joinChannel
         'type': _isVideoMode ? 'video' : 'voice',
         'status': _remoteUsers.isNotEmpty ? 'answered' : 'missed',
         'duration': _seconds,
@@ -259,28 +428,37 @@ class _GroupCallScreenState extends State<GroupCallScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1A),
-      body: Stack(
-        children: [
-          // Background
-          _buildBackground(),
-          // Content
-          SafeArea(
-            child: Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: _isVideoMode && _remoteUsers.isNotEmpty
-                      ? _buildVideoGrid()
-                      : _buildVoiceUI(),
-                ),
-                _buildControls(),
-                const SizedBox(height: 20),
-              ],
+    // FIXED Bug #16: PopScope mencegah iOS swipe-back tanpa cleanup
+    return PopScope(
+      canPop: _isEnding,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_isEnding) {
+          _endCall();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0F1A),
+        body: Stack(
+          children: [
+            // Background
+            _buildBackground(),
+            // Content
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildTopBar(),
+                  Expanded(
+                    child: _isVideoMode && _remoteUsers.isNotEmpty
+                        ? _buildVideoGrid()
+                        : _buildVoiceUI(),
+                  ),
+                  _buildControls(),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -418,14 +596,20 @@ class _GroupCallScreenState extends State<GroupCallScreen>
         itemCount: totalParticipants,
         itemBuilder: (context, index) {
           if (index == 0) {
-            // Local user
+            // Local user tile
             return _buildVideoTile(
-              child: _cameraOff
+              child: (_cameraOff || !_engineReady || _engine == null)
                   ? _buildAvatarPlaceholder('Anda')
                   : AgoraVideoView(
                       controller: VideoViewController(
-                        rtcEngine: _engine,
-                        canvas: const VideoCanvas(uid: 0),
+                        rtcEngine: _engine!,
+                        canvas: const VideoCanvas(
+                          uid: 0, // FIXED: local = uid 0
+                          renderMode: RenderModeType.renderModeHidden,
+                        ),
+                        // FIXED: Flutter texture lebih stabil cross-platform
+                        useFlutterTexture: true,
+                        useAndroidSurfaceView: false,
                       ),
                     ),
               label: 'Anda',
@@ -434,18 +618,36 @@ class _GroupCallScreenState extends State<GroupCallScreen>
           }
 
           final remoteUid = participants[index - 1];
+          // FIXED: Tampilkan AgoraVideoView segera setelah user join
+          // Overlay avatar hanya jika video belum streaming (hasVideo=false)
           final hasVideo = _remoteUsers[remoteUid] ?? false;
 
           return _buildVideoTile(
-            child: hasVideo
-                ? AgoraVideoView(
-                    controller: VideoViewController.remote(
-                      rtcEngine: _engine,
-                      canvas: VideoCanvas(uid: remoteUid),
-                      connection: RtcConnection(channelId: 'group_${widget.channelName}'),
-                    ),
-                  )
-                : _buildAvatarPlaceholder('Peserta $index'),
+            child: (_engine == null || !_engineReady)
+                ? _buildAvatarPlaceholder('Peserta $index')
+                : Stack(
+                    children: [
+                      // FIXED: Selalu render remote view — view akan blank sendiri
+                      // jika stream belum datang, bukan crash
+                      Positioned.fill(
+                        child: AgoraVideoView(
+                          controller: VideoViewController.remote(
+                            rtcEngine: _engine!,
+                            canvas: VideoCanvas(
+                              uid: remoteUid, // FIXED: uid dari onUserJoined
+                              renderMode: RenderModeType.renderModeHidden,
+                            ),
+                            connection: RtcConnection(channelId: 'group_${widget.channelName}'),
+                            useFlutterTexture: true,  // FIXED
+                            useAndroidSurfaceView: false,
+                          ),
+                        ),
+                      ),
+                      // Overlay avatar jika video belum aktif
+                      if (!hasVideo)
+                        Positioned.fill(child: _buildAvatarPlaceholder('Peserta $index')),
+                    ],
+                  ),
             label: 'Peserta $index',
             isMuted: false,
           );
