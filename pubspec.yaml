@@ -32,8 +32,6 @@ dependencies:
   image_cropper: 7.1.0 # Crop, rotate, tata letak gambar
   file_picker: ^8.0.0
   supabase_flutter: ^2.6.0
-  record: ^5.1.2
-  path_provider: ^2.1.2
 
   cupertino_icons: ^1.0.8
   url_launcher: ^6.2.5
@@ -50,9 +48,6 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   mockito: ^5.4.4
   build_runner: ^2.4.13
-
-dependency_overrides:
-  record_platform_interface: 1.5.0
 
 flutter:
   uses-material-design: true

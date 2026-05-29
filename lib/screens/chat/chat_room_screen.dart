@@ -15,8 +15,6 @@ import 'photo_confirm_screen.dart';
 import '../call/call_screen.dart';
 import '../contacts/contact_info_screen.dart';
 import '../../services/purchase_service.dart';
-import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final UserModel otherUser;
@@ -49,79 +47,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> with TickerProviderStat
   StreamSubscription? _typingSub;
   StreamSubscription? _readSub;
 
-  // ── RECORDING STATE VARIABLES ──
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
-  int _recordingDuration = 0;
-  Timer? _recordingTimer;
-  String? _recordingPath;
-
-  Future<void> _startRecording() async {
-    try {
-      if (await _audioRecorder.hasPermission()) {
-        final tempDir = await getTemporaryDirectory();
-        final String path = '${tempDir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        
-        await _audioRecorder.start(
-          const RecordConfig(
-            encoder: AudioEncoder.aacLc,
-            bitRate: 128000,
-            sampleRate: 44100,
-          ),
-          path: path,
-        );
-
-        _recordingDuration = 0;
-        _recordingPath = path;
-        setState(() {
-          _isRecording = true;
-        });
-
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (mounted) {
-            setState(() {
-              _recordingDuration++;
-            });
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    try {
-      _recordingTimer?.cancel();
-      final path = await _audioRecorder.stop();
-      setState(() {
-        _isRecording = false;
-      });
-
-      if (path != null && _recordingPath != null) {
-        await widget.chatService.sendAudio(
-          roomId: widget.roomId,
-          senderId: widget.currentUid,
-          filePath: _recordingPath!,
-        );
-      }
-    } catch (e) {
-      debugPrint('Error stopping recording: $e');
-      setState(() {
-        _isRecording = false;
-      });
-    }
-  }
-
-  String get _recordingDurationString {
-    final minutes = (_recordingDuration ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_recordingDuration % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   @override
   void initState() {
     super.initState();
+
     _loadMessages();
     _setupListeners();
   }
@@ -135,8 +64,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> with TickerProviderStat
     _msgSub?.cancel();
     _typingSub?.cancel();
     _readSub?.cancel();
-    _recordingTimer?.cancel();
-    _audioRecorder.dispose();
     widget.chatService.sendTyping(widget.roomId, false);
     super.dispose();
   }
@@ -506,129 +433,77 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> with TickerProviderStat
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // Left outside: "+" button for attachments
-            IconButton(
-              icon: const Icon(Icons.add, color: Colors.white, size: 28),
-              onPressed: () => _showAttachmentMenu(context, isDark),
-              constraints: const BoxConstraints(),
-              padding: const EdgeInsets.only(bottom: 10, right: 8, left: 4),
-            ),
-            // Middle: Pill Container
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E2225) : Colors.white,
+                  color: isDark ? const Color(0xFF2B2B2B) : Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withOpacity(0.12) : Colors.grey.withOpacity(0.2),
-                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _isRecording
-                    ? Row(
-                        children: [
-                          const _FlashingRedDot(),
-                          const SizedBox(width: 8),
-                          Text(
-                            _recordingDurationString,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.emoji_emotions_outlined, color: Colors.grey[500]),
+                      onPressed: () => _showStickerPicker(context, isDark),
+                    ),
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 120),
+                        child: TextField(
+                          controller: _messageController,
+                          focusNode: _focusNode,
+                          onChanged: _onTyping,
+                          style: TextStyle(color: isDark ? Colors.white : RupiaColors.textPrimary),
+                          maxLines: null,
+                          textInputAction: TextInputAction.newline,
+                          decoration: InputDecoration(
+                            hintText: 'Ketik pesan',
+                            hintStyle: TextStyle(color: Colors.grey[500]),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          const Spacer(),
-                          const Text(
-                            'Merekam...',
-                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 120),
-                              child: TextField(
-                                controller: _messageController,
-                                focusNode: _focusNode,
-                                onChanged: _onTyping,
-                                style: TextStyle(color: isDark ? Colors.white : RupiaColors.textPrimary),
-                                maxLines: null,
-                                textInputAction: TextInputAction.newline,
-                                decoration: InputDecoration(
-                                  hintText: 'Ketik pesan',
-                                  hintStyle: TextStyle(color: Colors.grey[500]),
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Sticker icon inside the pill on the right end
-                          IconButton(
-                            icon: Icon(Icons.sticky_note_2_rounded, color: Colors.grey[500], size: 22),
-                            onPressed: () => _showStickerPicker(context, isDark),
-                            constraints: const BoxConstraints(),
-                            padding: const EdgeInsets.only(bottom: 10, left: 4, right: 4),
-                          ),
-                        ],
+                        ),
                       ),
+                    ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _messageController,
+                      builder: (context, value, child) {
+                        if (value.text.isEmpty) {
+                          return IconButton(
+                            icon: Icon(Icons.camera_alt, color: Colors.grey[500]),
+                            onPressed: _pickCameraImage,
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),
-            // Right outside: Actions (Camera and Send/Mic)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (!_isRecording) ...[
-                  IconButton(
-                    icon: const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 26),
-                    onPressed: _pickCameraImage,
-                    constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.only(bottom: 10, right: 10, left: 6),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _messageController,
+              builder: (context, value, child) {
+                final isTyping = value.text.isNotEmpty;
+                
+                return GestureDetector(
+                  onTap: isTyping ? _sendMessage : () => _showAttachmentMenu(context, isDark),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: RupiaColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isTyping ? Icons.send : Icons.attach_file, 
+                      color: Colors.white, 
+                      size: 22,
+                    ),
                   ),
-                ],
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _messageController,
-                  builder: (context, value, child) {
-                    final isTyping = value.text.isNotEmpty;
-                    
-                    return GestureDetector(
-                      onLongPressStart: isTyping ? null : (_) => _startRecording(),
-                      onLongPressEnd: isTyping ? null : (_) => _stopRecording(),
-                      onTap: isTyping 
-                          ? _sendMessage 
-                          : () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Tahan tombol mikrofon untuk merekam voice note'),
-                                  duration: Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            },
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: _isRecording ? Colors.red : RupiaColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isTyping 
-                              ? Icons.send 
-                              : (_isRecording ? Icons.mic_rounded : Icons.mic_none_outlined),
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+                );
+              },
             ),
           ],
         ),
@@ -1311,40 +1186,6 @@ class _PdfBubble extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _FlashingRedDot extends StatefulWidget {
-  const _FlashingRedDot();
-
-  @override
-  State<_FlashingRedDot> createState() => _FlashingRedDotState();
-}
-
-class _FlashingRedDotState extends State<_FlashingRedDot> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _controller,
-      child: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
     );
   }
 }

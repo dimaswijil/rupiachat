@@ -177,8 +177,6 @@ PODS:
     - NWWebSocket (~> 0.5.10)
     - PusherTweetNacl (~> 1.2.0)
   - PusherTweetNacl (1.2.0)
-  - record_darwin (1.0.0):
-    - Flutter
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
@@ -206,7 +204,6 @@ DEPENDENCIES:
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - pusher_channels_flutter (from `.symlinks/plugins/pusher_channels_flutter/ios`)
-  - record_darwin (from `.symlinks/plugins/record_darwin/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
 
@@ -265,8 +262,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
   pusher_channels_flutter:
     :path: ".symlinks/plugins/pusher_channels_flutter/ios"
-  record_darwin:
-    :path: ".symlinks/plugins/record_darwin/ios"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
   url_launcher_ios:
@@ -306,7 +301,6 @@ SPEC CHECKSUMS:
   pusher_channels_flutter: 3571facd04faf1350cbc77d6a09f5c1ff50d296d
   PusherSwift: 6022fe6584b4317dc5c177091292b2a4d80a8c35
   PusherTweetNacl: 015f56f2cf010e718703f2bd9bca66fdcc91b208
-  record_darwin: 3b1a8e7d5c0cbf45ad6165b4d83a6ca643d929c3
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4

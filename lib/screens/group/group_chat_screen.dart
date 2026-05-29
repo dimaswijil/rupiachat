@@ -17,9 +17,6 @@ import '../call/group_call_screen.dart';
 import '../../widgets/call_bubble.dart';
 import '../../services/call_api_service.dart';
 import 'group_info_screen.dart';
-import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:audioplayers/audioplayers.dart';
 
 /// Chat room untuk grup — mirip dengan ChatRoomScreen tapi untuk grup
 class GroupChatScreen extends StatefulWidget {
@@ -52,75 +49,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   late String _groupName;
   String? _groupPhoto;
 
-  // ── RECORDING STATE VARIABLES ──
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
-  int _recordingDuration = 0;
-  Timer? _recordingTimer;
-  String? _recordingPath;
-
-  Future<void> _startRecording() async {
-    try {
-      if (await _audioRecorder.hasPermission()) {
-        final tempDir = await getTemporaryDirectory();
-        final String path = '${tempDir.path}/vn_group_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        
-        await _audioRecorder.start(
-          const RecordConfig(
-            encoder: AudioEncoder.aacLc,
-            bitRate: 128000,
-            sampleRate: 44100,
-          ),
-          path: path,
-        );
-
-        _recordingDuration = 0;
-        _recordingPath = path;
-        setState(() {
-          _isRecording = true;
-        });
-
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (mounted) {
-            setState(() {
-              _recordingDuration++;
-            });
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    try {
-      _recordingTimer?.cancel();
-      final path = await _audioRecorder.stop();
-      setState(() {
-        _isRecording = false;
-      });
-
-      if (path != null && _recordingPath != null) {
-        await _groupService.sendAudio(
-          groupId: widget.groupId,
-          filePath: _recordingPath!,
-        );
-      }
-    } catch (e) {
-      debugPrint('Error stopping recording: $e');
-      setState(() {
-        _isRecording = false;
-      });
-    }
-  }
-
-  String get _recordingDurationString {
-    final minutes = (_recordingDuration ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_recordingDuration % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -141,8 +69,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _subscription?.cancel();
     _controller.dispose();
     _scrollCtrl.dispose();
-    _recordingTimer?.cancel();
-    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -294,78 +220,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         });
       }
     }
-  }
-
-  Future<void> _sendSticker(String stickerUrlOrEmoji) async {
-    try {
-      await _groupService.sendMessage(
-        groupId: widget.groupId,
-        text: stickerUrlOrEmoji,
-        type: 'sticker',
-      );
-    } catch (e) {
-      debugPrint('Error sending sticker to group: $e');
-    }
-  }
-
-  void _showStickerPicker(BuildContext context, bool isDark) {
-    final List<String> stickers = [
-      '🐻', '🐼', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧',
-      '👍', '👎', '👏', '🙌', '🫶', '❤️', '🔥', '✨', '🎉', '💯',
-      '😂', '😍', '😎', '😭', '😡', '😱', '🤔', '😴', '🥳', '🤯'
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? const Color(0xFF2B2B2B) : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'Sticker Pack Eksklusif',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 250,
-              child: GridView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 5,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                ),
-                itemCount: stickers.length,
-                itemBuilder: (context, index) {
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _sendSticker(stickers[index]);
-                    },
-                    child: Center(
-                      child: Text(
-                        stickers[index],
-                        style: const TextStyle(fontSize: 32),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showGroupInfo() {
@@ -605,127 +459,78 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Left outside: "+" button for attachments
-                IconButton(
-                  icon: const Icon(Icons.add, color: Colors.white, size: 28),
-                  onPressed: () => _showAttachmentMenu(context, isDarkMode),
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.only(bottom: 10, right: 8, left: 4),
-                ),
-                // Middle: Pill Container
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isDarkMode ? const Color(0xFF1E2225) : Colors.white,
+                      color: isDarkMode ? const Color(0xFF2B2B2B) : Colors.white,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: isDarkMode ? Colors.white.withOpacity(0.12) : Colors.grey.withOpacity(0.2),
-                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    child: _isRecording
-                        ? Row(
-                            children: [
-                              const _FlashingRedDot(),
-                              const SizedBox(width: 8),
-                              Text(
-                                _recordingDurationString,
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.emoji_emotions_outlined, color: Colors.grey[500]),
+                          onPressed: () {},
+                        ),
+                        Expanded(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 120),
+                            child: TextField(
+                              controller: _controller,
+                              style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
+                              maxLines: null,
+                              textInputAction: TextInputAction.newline,
+                              decoration: InputDecoration(
+                                hintText: 'Ketik pesan',
+                                hintStyle: TextStyle(color: Colors.grey[500]),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
                               ),
-                              const Spacer(),
-                              const Text(
-                                'Merekam...',
-                                style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Expanded(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(maxHeight: 120),
-                                  child: TextField(
-                                    controller: _controller,
-                                    style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
-                                    maxLines: null,
-                                    textInputAction: TextInputAction.newline,
-                                    decoration: InputDecoration(
-                                      hintText: 'Ketik pesan',
-                                      hintStyle: TextStyle(color: Colors.grey[500]),
-                                      border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // Sticker icon inside the pill on the right end
-                              IconButton(
-                                icon: Icon(Icons.sticky_note_2_rounded, color: Colors.grey[500], size: 22),
-                                onPressed: () => _showStickerPicker(context, isDarkMode),
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.only(bottom: 10, left: 4, right: 4),
-                              ),
-                            ],
+                            ),
                           ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.attach_file, color: Colors.grey[500]),
+                          onPressed: () => _showAttachmentMenu(context, isDarkMode),
+                        ),
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _controller,
+                          builder: (context, value, child) {
+                            if (value.text.isEmpty) {
+                              return IconButton(
+                                icon: Icon(Icons.camera_alt, color: Colors.grey[500]),
+                                onPressed: _pickCameraImage,
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Right outside: Actions (Camera and Send/Mic)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (!_isRecording) ...[
-                      IconButton(
-                        icon: const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 26),
-                        onPressed: _pickCameraImage,
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.only(bottom: 10, right: 10, left: 6),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, child) {
+                    final isTyping = value.text.isNotEmpty;
+                    return GestureDetector(
+                      onTap: isTyping ? _sendMessage : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: RupiaColors.primary, // RupiaChat Blue
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isTyping ? Icons.send : Icons.mic, 
+                          color: Colors.white, 
+                          size: 22,
+                        ),
                       ),
-                    ],
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _controller,
-                      builder: (context, value, child) {
-                        final isTyping = value.text.isNotEmpty;
-                        
-                        return GestureDetector(
-                          onLongPressStart: isTyping ? null : (_) => _startRecording(),
-                          onLongPressEnd: isTyping ? null : (_) => _stopRecording(),
-                          onTap: isTyping 
-                              ? _sendMessage 
-                              : () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Tahan tombol mikrofon untuk merekam voice note'),
-                                      duration: Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                },
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: _isRecording ? Colors.red : RupiaColors.primary,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isTyping 
-                                  ? Icons.send 
-                                  : (_isRecording ? Icons.mic_rounded : Icons.mic_none_outlined),
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -1239,47 +1044,6 @@ class _GroupMessageBubble extends StatelessWidget {
                       )
                   else if (isPdf)
                     _buildPdfBubble(context, text, isMe, isDarkMode, time)
-                  else if (type == 'audio')
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        _AudioBubble(url: text, isMe: isMe),
-                        const SizedBox(height: 2),
-                        Text(
-                          time,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isMe
-                                ? Colors.white60
-                                : (isDarkMode
-                                    ? Colors.white30
-                                    : RupiaColors.textHint),
-                          ),
-                        ),
-                      ],
-                    )
-                  else if (type == 'sticker')
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          text,
-                          style: const TextStyle(fontSize: 60),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          time,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isMe
-                                ? Colors.white60
-                                : (isDarkMode
-                                    ? Colors.white30
-                                    : RupiaColors.textHint),
-                          ),
-                        ),
-                      ],
-                    )
                   else
                     // Text + time in same row (WhatsApp style)
                     Wrap(
@@ -2208,139 +1972,6 @@ class _GroupInfoSheetState extends State<_GroupInfoSheet> {
           ],
         );
       },
-    );
-  }
-}
-
-class _FlashingRedDot extends StatefulWidget {
-  const _FlashingRedDot();
-
-  @override
-  State<_FlashingRedDot> createState() => _FlashingRedDotState();
-}
-
-class _FlashingRedDotState extends State<_FlashingRedDot> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _controller,
-      child: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
-    );
-  }
-}
-
-class _AudioBubble extends StatefulWidget {
-  final String url;
-  final bool isMe;
-
-  const _AudioBubble({required this.url, required this.isMe});
-
-  @override
-  State<_AudioBubble> createState() => _AudioBubbleState();
-}
-
-class _AudioBubbleState extends State<_AudioBubble> {
-  late AudioPlayer _audioPlayer;
-  bool _isPlaying = false;
-  Duration _duration = Duration.zero;
-  Duration _position = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-    _audioPlayer = AudioPlayer();
-
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
-    });
-
-    _audioPlayer.onDurationChanged.listen((newDuration) {
-      if (mounted) setState(() => _duration = newDuration);
-    });
-
-    _audioPlayer.onPositionChanged.listen((newPosition) {
-      if (mounted) setState(() => _position = newPosition);
-    });
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
-  }
-
-  void _togglePlay() async {
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-    } else {
-      await _audioPlayer.play(UrlSource(widget.url));
-    }
-  }
-
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.toString().padLeft(2, '0');
-    final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return "$minutes:$seconds";
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(
-            _isPlaying ? Icons.pause : Icons.play_arrow,
-            color: widget.isMe ? Colors.white : RupiaColors.primary,
-          ),
-          onPressed: _togglePlay,
-        ),
-        SliderTheme(
-          data: SliderThemeData(
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            trackHeight: 2,
-            activeTrackColor: widget.isMe ? Colors.white : RupiaColors.primary,
-            inactiveTrackColor: widget.isMe ? Colors.white38 : Colors.grey[300],
-            thumbColor: widget.isMe ? Colors.white : RupiaColors.primary,
-          ),
-          child: SizedBox(
-            width: 120,
-            child: Slider(
-              min: 0,
-              max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1,
-              value: _position.inSeconds.toDouble(),
-              onChanged: (value) async {
-                final pos = Duration(seconds: value.toInt());
-                await _audioPlayer.seek(pos);
-              },
-            ),
-          ),
-        ),
-        Text(
-          _formatDuration(_position.inSeconds > 0 ? _position : _duration),
-          style: TextStyle(
-            fontSize: 12,
-            color: widget.isMe ? Colors.white : RupiaColors.textPrimary,
-          ),
-        ),
-      ],
     );
   }
 }
