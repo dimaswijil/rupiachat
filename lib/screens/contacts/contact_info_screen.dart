@@ -5,6 +5,7 @@ import '../../models/user_model.dart';
 import '../../config/api_config.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/purchase_service.dart';
 import '../../widgets/avatar_widget.dart';
 import '../../utils/colors.dart';
 import '../chat/chat_room_screen.dart';
@@ -96,7 +97,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   void _goToChat() async {
     final chatService = ChatService();
     final token = await AuthService().currentToken;
-    final uid = await AuthService().currentUid ?? '';
+    final uid = _currentUid;
     if (token != null) chatService.setToken(token);
     final roomId = widget.roomId.isNotEmpty
         ? widget.roomId
@@ -115,7 +116,16 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
 
   /// Start a voice call
   void _startCall() async {
-    final uid = await AuthService().currentUid ?? '';
+    if (!PurchaseService().isFeatureUnlocked('voice_call')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member untuk melakukan panggilan.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final uid = _currentUid;
     final channelName = 'call_${uid}_${widget.user.uid}';
     if (mounted) {
       Navigator.push(context, MaterialPageRoute(
@@ -132,7 +142,16 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
 
   /// Start a video call
   void _startVideoCall() async {
-    final uid = await AuthService().currentUid ?? '';
+    if (!PurchaseService().isFeatureUnlocked('voice_call')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member untuk melakukan panggilan.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final uid = _currentUid;
     final channelName = 'call_${uid}_${widget.user.uid}';
     if (mounted) {
       Navigator.push(context, MaterialPageRoute(
@@ -151,7 +170,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   void _searchInChat() async {
     final chatService = ChatService();
     final token = await AuthService().currentToken;
-    final uid = await AuthService().currentUid ?? '';
+    final uid = _currentUid;
     if (token != null) chatService.setToken(token);
     final roomId = widget.roomId.isNotEmpty
         ? widget.roomId
@@ -194,7 +213,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
             centerTitle: true,
             flexibleSpace: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -210,7 +229,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 36),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [RupiaColors.primary, Color(0xFF2557B3)],
@@ -327,8 +346,8 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                     ],
                   ),
                   child: _loadingCalls
-                      ? const Padding(
-                          padding: EdgeInsets.all(24),
+                      ? Padding(
+                          padding: const EdgeInsets.all(24),
                           child: Center(child: CircularProgressIndicator(color: RupiaColors.primary, strokeWidth: 2)),
                         )
                       : _callLogs.isEmpty
@@ -342,7 +361,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                                       shape: BoxShape.circle,
                                       color: RupiaColors.primary.withOpacity(0.1),
                                     ),
-                                    child: const Icon(Icons.call_rounded, color: RupiaColors.primary, size: 18),
+                                    child: Icon(Icons.call_rounded, color: RupiaColors.primary, size: 18),
                                   ),
                                   const SizedBox(width: 14),
                                   Text('Belum ada riwayat panggilan',
@@ -415,7 +434,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                       shape: BoxShape.circle,
                       color: RupiaColors.primary.withOpacity(0.1),
                     ),
-                    child: const Icon(Icons.photo_library_rounded, color: RupiaColors.primary, size: 18),
+                    child: Icon(Icons.photo_library_rounded, color: RupiaColors.primary, size: 18),
                   ),
                   title: Text('Media, Link, dan Dokumen',
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
@@ -602,7 +621,16 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   }
 
   void _startCallFromLog(bool isVideo) async {
-    final uid = await AuthService().currentUid ?? '';
+    if (!PurchaseService().isFeatureUnlocked('voice_call')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member untuk melakukan panggilan.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final uid = _currentUid;
     final channelName = 'call_${uid}_${widget.user.uid}';
     if (mounted) {
       Navigator.push(context, MaterialPageRoute(

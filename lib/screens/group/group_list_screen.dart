@@ -3,9 +3,11 @@ import 'dart:ui';
 import '../../services/auth_service.dart';
 import '../../services/group_service.dart';
 import '../../models/group_model.dart';
+import '../../models/message_model.dart';
 import '../../utils/colors.dart';
 import 'create_group_screen.dart';
 import 'group_chat_screen.dart';
+import '../../widgets/premium_lock_overlay.dart';
 
 class GroupListScreen extends StatefulWidget {
   const GroupListScreen({super.key});
@@ -77,7 +79,7 @@ class _GroupListScreenState extends State<GroupListScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -103,84 +105,89 @@ class _GroupListScreenState extends State<GroupListScreen> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          // ── Search bar (sama persis dengan Chat List) ──
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [RupiaColors.primary, RupiaColors.primary],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+      body: PremiumLockOverlay(
+        featureSlug: 'group_create', // Also locked by VIP
+        title: 'Fitur Grup Terkunci',
+        message: 'Tingkatkan ke VIP Member untuk membuka fitur Grup, membuat grup baru, dan akses semua fitur eksklusif lainnya.',
+        child: Column(
+          children: [
+            // ── Search bar (sama persis dengan Chat List) ──
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [RupiaColors.primary, RupiaColors.primary],
                 ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(isDarkMode ? 0.1 : 0.3),
-                      width: 1,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(isDarkMode ? 0.1 : 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _filterGroups,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: InputDecoration(
+                        hintText: 'Cari grup...',
+                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
+                        prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
                     ),
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _filterGroups,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    decoration: InputDecoration(
-                      hintText: 'Cari grup...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    ),
-                  ),
                 ),
               ),
             ),
-          ),
-          // ── Content ──
-          Expanded(
-            child: Container(
-              color: isDarkMode ? RupiaColors.bgDark : RupiaColors.bg,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
-                  : _filteredGroups.isEmpty
-                      ? _buildEmptyState(isDarkMode)
-                      : RefreshIndicator(
-                              onRefresh: _loadGroups,
-                              color: RupiaColors.primary,
-                              child: ListView.builder(
-                                // Padding bawah agar item terakhir tidak tertutup floating navbar
-                                padding: const EdgeInsets.only(bottom: 100),
-                                itemCount: _filteredGroups.length,
-                                itemBuilder: (context, index) {
-                                  final group = _filteredGroups[index];
-                                  return Column(
-                                    children: [
-                                      _buildGroupTile(group, isDarkMode),
-                                      Divider(indent: 72, height: 1, thickness: 0.5,
-                                          color: isDarkMode ? Colors.white10 : Colors.black12),
-                                    ],
-                                  );
-                                },
+            // ── Content ──
+            Expanded(
+              child: Container(
+                color: isDarkMode ? RupiaColors.bgDark : RupiaColors.bg,
+                child: _loading
+                    ? Center(child: CircularProgressIndicator(color: RupiaColors.primary))
+                    : _filteredGroups.isEmpty
+                        ? _buildEmptyState(isDarkMode)
+                        : RefreshIndicator(
+                                onRefresh: _loadGroups,
+                                color: RupiaColors.primary,
+                                child: ListView.builder(
+                                  // Padding bawah agar item terakhir tidak tertutup floating navbar
+                                  padding: const EdgeInsets.only(bottom: 100),
+                                  itemCount: _filteredGroups.length,
+                                  itemBuilder: (context, index) {
+                                    final group = _filteredGroups[index];
+                                    return Column(
+                                      children: [
+                                        _buildGroupTile(group, isDarkMode),
+                                        Divider(indent: 72, height: 1, thickness: 0.5,
+                                            color: isDarkMode ? Colors.white10 : Colors.black12),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
+                  ),
                 ),
-              ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -417,13 +424,6 @@ class _GroupListScreenState extends State<GroupListScreen> {
 
   String _formatLastMessage(String? msg, int memberCount) {
     if (msg == null || msg.isEmpty) return '$memberCount anggota';
-    if (msg.startsWith('http')) return '📷 Foto';
-    if (msg == '[Gambar]') return '📷 Foto';
-    // Format pesan call agar tidak tampil JSON mentah
-    if (msg.startsWith('{') && msg.contains('call_type')) {
-      if (msg.contains('"video"')) return '📹 Panggilan Video';
-      return '📞 Panggilan Suara';
-    }
-    return msg;
+    return MessageModel.formatPreview(msg);
   }
 }

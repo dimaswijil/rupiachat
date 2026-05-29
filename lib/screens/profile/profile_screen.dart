@@ -3,6 +3,8 @@ import 'package:image_picker/image_picker.dart'; // <--- Pastikan ini ada
 import 'package:image_cropper/image_cropper.dart'; // Import buat fitur tata letak
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/auth_service.dart';
+import '../../services/purchase_service.dart'; // Tambahkan ini
+import '../purchase/purchase_screen.dart'; // Tambahkan ini
 import '../../utils/colors.dart';
 import '../../main.dart'; 
 import 'edit_profile_screen.dart';
@@ -28,12 +30,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _initials = '';
   bool _loading    = true;
   bool _isDark     = false;
+  bool _isThemeProUnlocked = false;
+
+  final List<Map<String, dynamic>> _themeColors = [
+    {'name': 'Royal Blue', 'color': const Color(0xFF1A3C8F), 'isDefault': true},
+    {'name': 'Emerald Green', 'color': const Color(0xFF0F6E56), 'isDefault': false},
+    {'name': 'Deep Teal', 'color': const Color(0xFF008080), 'isDefault': false},
+    {'name': 'Indigo Purple', 'color': const Color(0xFF4B0082), 'isDefault': false},
+    {'name': 'Sunset Amber', 'color': const Color(0xFFD97706), 'isDefault': false},
+    {'name': 'Crimson Red', 'color': const Color(0xFF993C1D), 'isDefault': false},
+    {'name': 'Hot Pink', 'color': const Color(0xFFE91E63), 'isDefault': false},
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
     _loadThemeStatus();
+    _checkThemeProStatus();
+  }
+
+  Future<void> _checkThemeProStatus() async {
+    try {
+      final active = await PurchaseService().getActiveFeatures();
+      if (mounted) {
+        setState(() {
+          _isThemeProUnlocked = active.contains('theme_pro') || active.contains('vip_member');
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading theme pro status: $e');
+    }
+  }
+
+  Future<void> _selectThemeColor(Color color) async {
+    await RupiaColors.saveThemeColor(color);
+    themeColorNotifier.value = color;
+    setState(() {});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tema warna berhasil diubah!'),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  void _showThemeProLockedDialog(String colorName, Color color) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.workspace_premium_rounded, color: RupiaColors.gold),
+            SizedBox(width: 8),
+            Text('Tema Pro Terkunci 👑', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Dapatkan akses penuh ke kustomisasi warna tema premium (seperti $colorName) dengan mengaktifkan Tema Pro!\n\nApakah Anda ingin membuka sekarang?',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: RupiaColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PurchaseScreen()),
+              ).then((_) => _checkThemeProStatus());
+            },
+            child: const Text('Buka Sekarang', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadThemeStatus() async {
@@ -143,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(child: CircularProgressIndicator(color: RupiaColors.primary)),
       );
     }
@@ -158,7 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(kToolbarHeight),
           child: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
                 colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -176,7 +258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Container(
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: [RupiaColors.primary, RupiaColors.primary],
                 ),
@@ -252,7 +334,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               shape: BoxShape.circle,
                               boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
                             ),
-                            child: const Icon(Icons.camera_alt, color: RupiaColors.primary, size: 20),
+                            child: Icon(Icons.camera_alt, color: RupiaColors.primary, size: 20),
                           ),
                         ),
                       ),
@@ -330,6 +412,156 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               value: _isDark,
                               activeColor: RupiaColors.primary,
                               onChanged: _toggleTheme,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // ── KUSTOMISASI WARNA TEMA PRO ──
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.grey[900] : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: isDarkMode ? [] : [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.color_lens_outlined, color: RupiaColors.primary, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Warna Tema (Tema Pro)',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                                if (!_isThemeProUnlocked)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: RupiaColors.gold.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: RupiaColors.gold.withOpacity(0.3)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.workspace_premium_rounded, color: RupiaColors.gold, size: 12),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'PRO',
+                                          style: TextStyle(
+                                            color: RupiaColors.gold,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 52,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _themeColors.length,
+                                itemBuilder: (ctx, i) {
+                                  final item = _themeColors[i];
+                                  final Color color = item['color'] as Color;
+                                  final String name = item['name'] as String;
+                                  final bool isDefault = item['isDefault'] as bool;
+                                  final bool isSelected = themeColorNotifier.value.value == color.value;
+
+                                  // Locked if not default color AND theme pro not unlocked
+                                  final bool isLocked = !isDefault && !_isThemeProUnlocked;
+
+                                  return GestureDetector(
+                                    onTap: () {
+                                      if (isLocked) {
+                                        _showThemeProLockedDialog(name, color);
+                                      } else {
+                                        _selectThemeColor(color);
+                                      }
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(right: 14),
+                                      child: Tooltip(
+                                        message: name,
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            AnimatedContainer(
+                                              duration: const Duration(milliseconds: 250),
+                                              width: 44,
+                                              height: 44,
+                                              decoration: BoxDecoration(
+                                                color: color,
+                                                shape: BoxShape.circle,
+                                                border: isSelected
+                                                    ? Border.all(
+                                                        color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                                                        width: 3,
+                                                      )
+                                                    : Border.all(
+                                                        color: Colors.transparent,
+                                                        width: 0,
+                                                      ),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: color.withOpacity(0.3),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            if (isSelected)
+                                              const Icon(
+                                                Icons.check_rounded,
+                                                color: Colors.white,
+                                                size: 20,
+                                              ),
+                                            if (isLocked)
+                                              Positioned(
+                                                bottom: 0,
+                                                right: 0,
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(3),
+                                                  decoration: const BoxDecoration(
+                                                    color: Colors.black87,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.lock_rounded,
+                                                    color: Colors.amber,
+                                                    size: 10,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                           ],
                         ),

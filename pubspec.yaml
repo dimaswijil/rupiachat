@@ -30,20 +30,29 @@ dependencies:
   shared_preferences: ^2.2.2
   image_picker: ^1.0.7 # Tambahkan ini untuk ambil gambar
   image_cropper: 7.1.0 # Crop, rotate, tata letak gambar
+  file_picker: ^8.0.0
+  supabase_flutter: ^2.6.0
+  record: ^5.1.2
+  path_provider: ^2.1.2
 
   cupertino_icons: ^1.0.8
   url_launcher: ^6.2.5
   flutter_local_notifications: ^19.5.0
 
-  midtrans_sdk: ^0.4.0
   http: ^1.1.0
   audioplayers: ^6.4.0
   flutter_callkit_incoming: ^3.0.0
+  app_links: 6.3.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  mockito: ^5.4.4
+  build_runner: ^2.4.13
+
+dependency_overrides:
+  record_platform_interface: 1.5.0
 
 flutter:
   uses-material-design: true

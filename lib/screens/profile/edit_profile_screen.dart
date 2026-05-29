@@ -81,7 +81,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -120,7 +120,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Nama Lengkap',
-                prefixIcon: const Icon(Icons.person_outline, color: RupiaColors.primary),
+                prefixIcon: Icon(Icons.person_outline, color: RupiaColors.primary),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
@@ -131,7 +131,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Email',
-                prefixIcon: const Icon(Icons.email_outlined, color: RupiaColors.primary),
+                prefixIcon: Icon(Icons.email_outlined, color: RupiaColors.primary),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
@@ -142,7 +142,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               style: TextStyle(color: isDarkMode ? Colors.white : RupiaColors.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Nomor Telepon',
-                prefixIcon: const Icon(Icons.phone_outlined, color: RupiaColors.primary),
+                prefixIcon: Icon(Icons.phone_outlined, color: RupiaColors.primary),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),

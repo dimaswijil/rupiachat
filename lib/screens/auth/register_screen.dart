@@ -192,7 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(
+            borderSide: BorderSide(
               color: RupiaColors.primary,
               width: 1.5,
             ),
@@ -341,7 +341,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           // Judul form
-                          const Text(
+                          Text(
                             'Daftar Sekarang',
                             textAlign: TextAlign.center,
                             style: TextStyle(

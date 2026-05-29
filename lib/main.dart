@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Tambahkan ini
+import 'package:dio/dio.dart'; // Tambahkan ini
 import 'firebase_options.dart';
 
 import 'config/api_config.dart';
@@ -65,6 +67,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // Global Notifier untuk Dark Mode
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
+// Global Notifier untuk warna utama Tema Pro
+final ValueNotifier<Color> themeColorNotifier = ValueNotifier(RupiaColors.primary);
+
 // Global Notifier untuk Tab Navigation agar tidak reset saat ganti tema
 final ValueNotifier<int> mainNavIndexNotifier = ValueNotifier(0);
 
@@ -77,6 +82,21 @@ void main() async {
 
   // Auto-discover server Laravel di jaringan lokal
   await ApiConfig.init();
+
+  // Inisialisasi Supabase Cloud Storage
+  try {
+    await Supabase.initialize(
+      url: 'https://udojvwycokcaoiqffmob.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkb2p2d3ljb2tjYW9pcWZmbW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NDEzMzMsImV4cCI6MjA5NTUxNzMzM30.iObM9WK03TtL6Jf3Gi7Fbok711Cra-Yk9cUC4YV2534',
+    );
+    debugPrint('✅ Supabase Storage initialized');
+  } catch (e) {
+    debugPrint('❌ Supabase Init Gagal: $e');
+  }
+
+  // Load custom primary theme color
+  await RupiaColors.loadThemeColor();
+  themeColorNotifier.value = RupiaColors.primary;
 
   // Load preferred theme from SharedPreferences
   final prefs = await SharedPreferences.getInstance();
@@ -96,10 +116,17 @@ void main() async {
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       final prefs = await SharedPreferences.getInstance();
       final authToken = prefs.getString('auth_token');
-      if (authToken != null && authToken.isNotEmpty) {
-        final chat = ChatService();
-        chat.setToken(authToken);
-        chat.updateFcmToken(newToken);
+      if (authToken != null) {
+        try {
+          final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
+          await dio.post('/api/user/fcm-token', 
+            data: {'fcm_token': newToken},
+            options: Options(headers: {'Authorization': 'Bearer $authToken'})
+          );
+          debugPrint('FCM Token auto-updated: $newToken');
+        } catch (e) {
+          debugPrint('⚠️ Gagal sinkronisasi FCM Token saat startup: $e');
+        }
       }
     });
 
@@ -136,32 +163,37 @@ class RupiaChatApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeNotifier,
-      builder: (context, currentMode, child) {
-        return MaterialApp(
-          navigatorKey: navigatorKey,
-          title: 'RupiaChat',
-          debugShowCheckedModeBanner: false,
-          themeMode: currentMode,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: RupiaColors.primary),
-            useMaterial3: true,
-            brightness: Brightness.light,
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: RupiaColors.primary,
-              brightness: Brightness.dark,
-            ),
-          ),
-          // Definisikan routes agar navigasi '/' lebih pasti
-          routes: {
-            '/': (context) => const AuthWrapper(),
-            '/login': (context) => const LoginScreen(),
-            '/home': (context) => const MainNavScreen(),
+    return ValueListenableBuilder<Color>(
+      valueListenable: themeColorNotifier,
+      builder: (context, primaryColor, child) {
+        return ValueListenableBuilder<ThemeMode>(
+          valueListenable: themeNotifier,
+          builder: (context, currentMode, child) {
+            return MaterialApp(
+              navigatorKey: navigatorKey,
+              title: 'RupiaChat',
+              debugShowCheckedModeBanner: false,
+              themeMode: currentMode,
+              theme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(seedColor: primaryColor),
+                useMaterial3: true,
+                brightness: Brightness.light,
+              ),
+              darkTheme: ThemeData(
+                useMaterial3: true,
+                brightness: Brightness.dark,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: primaryColor,
+                  brightness: Brightness.dark,
+                ),
+              ),
+              // Definisikan routes agar navigasi '/' lebih pasti
+              routes: {
+                '/': (context) => const AuthWrapper(),
+                '/login': (context) => const LoginScreen(),
+                '/home': (context) => const MainNavScreen(),
+              },
+            );
           },
         );
       },
@@ -241,9 +273,9 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: RupiaColors.primary,
-      body: Center(
+      body: const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

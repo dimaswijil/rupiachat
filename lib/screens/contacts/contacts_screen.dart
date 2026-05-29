@@ -75,7 +75,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
             pinned: true,
             automaticallyImplyLeading: false,
             flexibleSpace: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -112,7 +112,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                   decoration: InputDecoration(
                     hintText: 'Cari kontak...',
                     hintStyle: TextStyle(color: isDarkMode ? Colors.white38 : RupiaColors.textHint),
-                    prefixIcon: const Icon(Icons.search_rounded, color: RupiaColors.primary),
+                    prefixIcon: Icon(Icons.search_rounded, color: RupiaColors.primary),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -123,7 +123,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
           // ── Contacts List ──
           if (_loading)
-            const SliverFillRemaining(
+            SliverFillRemaining(
               child: Center(child: CircularProgressIndicator(color: RupiaColors.primary)),
             )
           else if (_filteredUsers.isEmpty)

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -161,12 +160,14 @@ class GroupService {
   Future<void> sendImage({
     required String groupId,
     required String filePath,
+    String? caption,
   }) async {
     try {
       String fileName = filePath.split('/').last;
       FormData formData = FormData.fromMap({
         'type': 'image',
         'text': '[Gambar]',
+        if (caption != null && caption.isNotEmpty) 'caption': caption,
         'image': await MultipartFile.fromFile(filePath, filename: fileName),
       });
       await _dio.post(
@@ -177,6 +178,51 @@ class GroupService {
     } catch (e) {
       debugPrint('SendGroupImage Error: $e');
       throw Exception('Gagal kirim gambar');
+    }
+  }
+
+  // ── KIRIM DOKUMEN PDF KE GRUP ─────────────────────────────
+  Future<void> sendPdf({
+    required String groupId,
+    required String filePath,
+  }) async {
+    try {
+      String fileName = filePath.split('/').last;
+      FormData formData = FormData.fromMap({
+        'type': 'pdf',
+        'text': '[Dokumen PDF]',
+        'document': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+      await _dio.post(
+        '/api/groups/$groupId/messages',
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+    } catch (e) {
+      debugPrint('SendGroupPdf Error: $e');
+    }
+  }
+
+  // ── KIRIM AUDIO KE GRUP ───────────────────────────────────
+  Future<void> sendAudio({
+    required String groupId,
+    required String filePath,
+  }) async {
+    try {
+      String fileName = filePath.split('/').last;
+      FormData formData = FormData.fromMap({
+        'type': 'audio',
+        'text': '[Audio]',
+        'audio': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+      await _dio.post(
+        '/api/groups/$groupId/messages',
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+    } catch (e) {
+      debugPrint('SendGroupAudio Error: $e');
+      throw Exception('Gagal kirim pesan suara');
     }
   }
 

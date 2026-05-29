@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
-import 'package:dio/dio.dart';
-import 'package:intl/intl.dart';
-import '../../config/api_config.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
-import '../../widgets/avatar_widget.dart';
 import '../../utils/colors.dart';
 import '../contacts/contact_info_screen.dart';
 import '../group/group_info_screen.dart';
 import 'call_screen.dart';
 import 'group_call_screen.dart';
+import 'controllers/call_history_controller.dart';
+import 'widgets/history/history_search_bar.dart';
+import 'widgets/history/history_empty_state.dart';
+import 'widgets/history/history_call_tile.dart';
+import '../../widgets/premium_lock_overlay.dart';
 
 class CallHistoryScreen extends StatefulWidget {
   const CallHistoryScreen({super.key});
@@ -21,9 +21,7 @@ class CallHistoryScreen extends StatefulWidget {
 
 class _CallHistoryScreenState extends State<CallHistoryScreen>
     with AutomaticKeepAliveClientMixin {
-  List<Map<String, dynamic>> _calls = [];
-  bool _loading = true;
-  String _searchQuery = '';
+  late final CallHistoryController _controller;
 
   @override
   bool get wantKeepAlive => true;
@@ -31,83 +29,20 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
   @override
   void initState() {
     super.initState();
-    _loadCallLogs();
+    _controller = CallHistoryController();
+    _controller.addListener(_onControllerChanged);
+    _controller.loadCallLogs();
   }
 
-  Future<void> _loadCallLogs() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-    try {
-      final token = await AuthService().currentToken;
-      if (token == null) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
-      final dio = Dio(BaseOptions(
-        baseUrl: ApiConfig.baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
-      ));
-      dio.options.headers['Authorization'] = 'Bearer $token';
-      dio.options.headers['Accept'] = 'application/json';
-
-      final res = await dio.get('/api/call-logs');
-
-      final rawData = res.data;
-      List<Map<String, dynamic>> calls = [];
-
-      if (rawData is Map && rawData.containsKey('data')) {
-        final dataList = rawData['data'];
-        if (dataList is List) {
-          for (var item in dataList) {
-            if (item is Map) {
-              calls.add(Map<String, dynamic>.from(item));
-            }
-          }
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _calls = calls;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('LoadCallLogs Error: $e');
-      if (mounted) setState(() => _loading = false);
-    }
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
-  List<Map<String, dynamic>> get _filteredCalls {
-    if (_searchQuery.isEmpty) return _calls;
-    return _calls.where((c) {
-      final name = (c['other_user_name'] ?? '').toString().toLowerCase();
-      final groupName = (c['group_name'] ?? '').toString().toLowerCase();
-      return name.contains(_searchQuery.toLowerCase()) ||
-          groupName.contains(_searchQuery.toLowerCase());
-    }).toList();
-  }
-
-  String _formatCallTime(String? createdAtStr) {
-    final createdAt = DateTime.tryParse(createdAtStr ?? '') ?? DateTime.now();
-    final now = DateTime.now();
-    final localTime = createdAt.toLocal();
-    final today = DateTime(now.year, now.month, now.day);
-    final msgDay = DateTime(localTime.year, localTime.month, localTime.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-
-    if (msgDay == today) {
-      return DateFormat('HH:mm').format(localTime);
-    } else if (msgDay == yesterday) {
-      return 'Kemarin';
-    } else if (now.difference(localTime).inDays < 7) {
-      // Nama hari
-      const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-      return days[localTime.weekday - 1];
-    } else {
-      return DateFormat('dd/MM/yy').format(localTime);
-    }
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
+    super.dispose();
   }
 
   /// Tap on a call tile → repeat the call (voice or video)
@@ -135,8 +70,6 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
       if (otherUserId.isEmpty) return;
       if (!mounted) return;
       // FIXED Bug #11: Generate channel name BARU setiap re-call
-      // Pakai channel lama bisa collision jika Agora channel belum expire (timeout ~5 menit)
-      // Format: call_{smallerUid}_{largerUid}_{timestamp}
       final sortedIds = [uid, otherUserId]..sort();
       final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final channelName = 'call_${sortedIds[0]}_${sortedIds[1]}_$timestamp';
@@ -201,14 +134,14 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final filtered = _filteredCalls;
+    final filtered = _controller.filteredCalls;
 
     return Scaffold(
       backgroundColor: isDark ? RupiaColors.bgDark : RupiaColors.bg,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -223,238 +156,55 @@ class _CallHistoryScreenState extends State<CallHistoryScreen>
           ),
         ),
       ),
-      body: Column(
-        children: [
-          // ── Search bar ──
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [RupiaColors.primary, RupiaColors.primary],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+      body: PremiumLockOverlay(
+        featureSlug: 'voice_call', // Any call feature unlocks this (or VIP)
+        title: 'Fitur Panggilan Terkunci',
+        message: 'Tingkatkan ke VIP Member untuk membuka fitur Panggilan Suara & Video tanpa batas, serta akses semua fitur premium lainnya.',
+        child: Column(
+          children: [
+            // ── Search bar ──
+            HistorySearchBar(
+              isDark: isDark,
+              onChanged: _controller.updateSearchQuery,
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(isDark ? 0.1 : 0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: TextField(
-                    onChanged: (q) => setState(() => _searchQuery = q),
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    decoration: InputDecoration(
-                      hintText: 'Cari panggilan...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.7), size: 20),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
 
-          // ── Call List ──
-          Expanded(
-            child: Container(
-              color: isDark ? RupiaColors.bgDark : RupiaColors.bg,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
-                  : filtered.isEmpty
-                          ? _buildEmptyState(isDark)
-                          : RefreshIndicator(
-                              onRefresh: _loadCallLogs,
-                              color: RupiaColors.primary,
-                              child: ListView.builder(
-                                // Padding bawah agar item terakhir tidak tertutup floating navbar
-                                padding: const EdgeInsets.only(bottom: 100),
-                                itemCount: filtered.length,
-                                itemBuilder: (context, index) => Column(
-                                  children: [
-                                    _buildCallTile(filtered[index], isDark),
-                                    Divider(indent: 72, height: 1, thickness: 0.5,
-                                        color: isDark ? Colors.white10 : Colors.black12),
-                                  ],
-                                ),
+            // ── Call List ──
+            Expanded(
+              child: Container(
+                color: isDark ? RupiaColors.bgDark : RupiaColors.bg,
+                child: _controller.loading
+                    ? Center(child: CircularProgressIndicator(color: RupiaColors.primary))
+                    : filtered.isEmpty
+                        ? HistoryEmptyState(isDark: isDark)
+                        : RefreshIndicator(
+                            onRefresh: _controller.loadCallLogs,
+                            color: RupiaColors.primary,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 100),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) => Column(
+                                children: [
+                                  HistoryCallTile(
+                                    call: filtered[index],
+                                    isDark: isDark,
+                                    onTap: () => _onCallTileTap(filtered[index]),
+                                    onInfoTap: () => _onInfoTap(filtered[index]),
+                                  ),
+                                  Divider(
+                                    indent: 72,
+                                    height: 1,
+                                    thickness: 0.5,
+                                    color: isDark ? Colors.white10 : Colors.black12,
+                                  ),
+                                ],
                               ),
                             ),
-                ),
+                          ),
               ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  Widget _buildEmptyState(bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 80, height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isDark
-                  ? Colors.white.withOpacity(0.06)
-                  : RupiaColors.primary.withOpacity(0.08),
-            ),
-            child: Icon(Icons.call_rounded, size: 36,
-                color: isDark ? Colors.white24 : RupiaColors.textHint),
-          ),
-          const SizedBox(height: 16),
-          Text('Belum ada riwayat panggilan',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white70 : RupiaColors.textPrimary)),
-          const SizedBox(height: 6),
-          Text('Panggilan suara dan video\nakan muncul di sini',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, height: 1.5,
-                  color: isDark ? Colors.white38 : RupiaColors.textSecondary)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCallTile(Map<String, dynamic> call, bool isDark) {
-    final isGroup = call['is_group'] == true;
-    final name = call['other_user_name']?.toString() ?? 'Unknown';
-    final type = call['type']?.toString() ?? 'voice';
-    final status = call['status']?.toString() ?? 'missed';
-    final duration = int.tryParse(call['duration']?.toString() ?? '0') ?? 0;
-    final isOutgoing = call['is_outgoing'] == true;
-    final isMissed = status == 'missed';
-    final isVideo = type == 'video';
-    final timeStr = _formatCallTime(call['created_at']?.toString());
-
-    // Format duration
-    String durationText = '';
-    if (status == 'answered' && duration > 0) {
-      final m = duration ~/ 60;
-      final s = duration % 60;
-      durationText = m > 0 ? '${m}m ${s}s' : '${s}s';
-    }
-
-    // Group members subtitle
-    String? groupMembersText;
-    if (isGroup) {
-      final memberCount = call['group_member_count'] ?? 0;
-      if (memberCount > 0) {
-        groupMembersText = '$memberCount anggota';
-      }
-    }
-
-    return InkWell(
-      onTap: () => _onCallTileTap(call),
-      child: Container(
-        color: isDark ? RupiaColors.bgDark : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(children: [
-          // Avatar
-          if (isGroup)
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark ? RupiaColors.primary.withOpacity(0.2) : RupiaColors.primary.withOpacity(0.1),
-              ),
-              child: const Icon(Icons.groups_rounded, color: RupiaColors.primary, size: 24),
-            )
-          else
-            AvatarWidget(
-              name: name,
-              size: 48,
-              photoUrl: call['other_user_photo']?.toString(),
-              interactive: false,
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name,
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15,
-                        color: isMissed
-                            ? const Color(0xFFEF4444)
-                            : (isDark ? Colors.white : RupiaColors.textPrimary))),
-                const SizedBox(height: 3),
-                Row(children: [
-                  Icon(
-                    isMissed
-                        ? Icons.call_missed_rounded
-                        : (isOutgoing ? Icons.call_made_rounded : Icons.call_received_rounded),
-                    size: 14,
-                    color: isMissed ? const Color(0xFFEF4444)
-                        : (isDark ? Colors.white38 : RupiaColors.textSecondary),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-                    size: 14,
-                    color: isDark ? Colors.white38 : RupiaColors.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      _buildCallSubtitle(isGroup, isVideo, durationText, isMissed, groupMembersText),
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12,
-                          color: isDark ? Colors.white38 : RupiaColors.textSecondary),
-                    ),
-                  ),
-                ]),
-              ],
-            ),
-          ),
-          // Time
-          Text(timeStr, style: TextStyle(fontSize: 11,
-              color: isDark ? Colors.white38 : RupiaColors.textSecondary)),
-          const SizedBox(width: 10),
-          // Info (i) icon
-          GestureDetector(
-            onTap: () => _onInfoTap(call),
-            child: Icon(Icons.info_outline_rounded, size: 22,
-                color: isDark ? Colors.white30 : Colors.grey.shade400),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  String _buildCallSubtitle(bool isGroup, bool isVideo, String durationText, bool isMissed, String? groupMembersText) {
-    final parts = <String>[];
-
-    if (isGroup) {
-      parts.add(isVideo ? 'Video Grup' : 'Suara Grup');
-      if (groupMembersText != null) parts.add(groupMembersText);
-    } else {
-      parts.add(isVideo ? 'Video' : 'Suara');
-    }
-
-    if (durationText.isNotEmpty) {
-      parts.add(durationText);
-    }
-
-    if (isMissed) {
-      parts.add('Tidak dijawab');
-    }
-
-    return parts.join(' · ');
   }
 }

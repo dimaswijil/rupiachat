@@ -12,7 +12,7 @@ class SecurityScreen extends StatelessWidget {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -30,7 +30,7 @@ class SecurityScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           ListTile(
-            leading: const Icon(Icons.password, color: RupiaColors.primary),
+            leading: Icon(Icons.password, color: RupiaColors.primary),
             title: Text('Ganti Kata Sandi', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
             trailing: const Icon(Icons.chevron_right, color: Colors.grey),
             onTap: () {
@@ -39,7 +39,7 @@ class SecurityScreen extends StatelessWidget {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.fingerprint, color: RupiaColors.primary),
+            leading: Icon(Icons.fingerprint, color: RupiaColors.primary),
             title: Text('Autentikasi Biometrik', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
             trailing: Switch(value: false, onChanged: (v){}),
           ),

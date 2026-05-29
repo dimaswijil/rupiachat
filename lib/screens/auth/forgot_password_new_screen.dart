@@ -118,12 +118,12 @@ class _ForgotPasswordNewScreenState extends State<ForgotPasswordNewScreen> {
             // ── GRADIENT HEADER ─────────────────────────────
             Container(
               height: MediaQuery.of(context).size.height * 0.35,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: [Color(0xFF0D2B6B), RupiaColors.primary, Color(0xFF2557B3)],
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
             ),
 
@@ -275,7 +275,7 @@ class _ForgotPasswordNewScreenState extends State<ForgotPasswordNewScreen> {
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: RupiaColors.primary, width: 1.5),
+        borderSide: BorderSide(color: RupiaColors.primary, width: 1.5),
       ),
     );
   }

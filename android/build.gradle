@@ -24,6 +24,28 @@ rootProject.buildDir = "../build"
 
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+
+    // Inject 'flutter' extension property to android block for compatibility with older plugins (like record_android)
+    project.plugins.withId('com.android.library') {
+        if (!project.android.hasProperty('flutter')) {
+            project.android.ext.flutter = [
+                compileSdkVersion: 34,
+                targetSdkVersion: 34,
+                minSdkVersion: 21,
+                ndkVersion: "26.1.10909125"
+            ]
+        }
+    }
+    project.plugins.withId('com.android.application') {
+        if (!project.android.hasProperty('flutter')) {
+            project.android.ext.flutter = [
+                compileSdkVersion: 34,
+                targetSdkVersion: 34,
+                minSdkVersion: 21,
+                ndkVersion: "26.1.10909125"
+            ]
+        }
+    }
 }
 
 subprojects {

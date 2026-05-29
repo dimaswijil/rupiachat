@@ -49,7 +49,7 @@ class _ArchivedChatScreenState extends State<ArchivedChatScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -68,7 +68,7 @@ class _ArchivedChatScreenState extends State<ArchivedChatScreen> {
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
+          ? Center(child: CircularProgressIndicator(color: RupiaColors.primary))
           : _archivedUsers.isEmpty
               ? Center(
                   child: Text('Tidak ada chat diarsipkan',

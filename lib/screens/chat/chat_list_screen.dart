@@ -6,6 +6,7 @@ import '../../services/chat_service.dart';
 import '../../services/group_service.dart';
 import '../../models/user_model.dart';
 import '../../models/group_model.dart';
+import '../../models/message_model.dart';
 import '../../widgets/avatar_widget.dart';
 import '../../utils/colors.dart';
 import 'chat_room_screen.dart';
@@ -199,7 +200,7 @@ class _ChatListScreenState extends State<_ChatListScreenContent> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.archive_outlined,
                     color: RupiaColors.primary,
                   ),
@@ -310,7 +311,7 @@ class _ChatListScreenState extends State<_ChatListScreenContent> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -346,7 +347,7 @@ class _ChatListScreenState extends State<_ChatListScreenContent> {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
                 colors: [RupiaColors.primary, RupiaColors.primary],
               ),
@@ -390,7 +391,7 @@ class _ChatListScreenState extends State<_ChatListScreenContent> {
           ),
           Expanded(
             child: _loading
-                ? const Center(
+                ? Center(
                 child: CircularProgressIndicator(color: RupiaColors.primary))
                 : RefreshIndicator(
               onRefresh: _loadUsers,
@@ -415,15 +416,15 @@ class _ChatListScreenState extends State<_ChatListScreenContent> {
                         _isNavigating = false;
                         _loadUsers();
                       },
-                      leading: const Padding(
-                        padding: EdgeInsets.only(left: 8),
+                      leading: Padding(
+                        padding: const EdgeInsets.only(left: 8),
                         child: Icon(Icons.archive_outlined, color: RupiaColors.primary),
                       ),
                       title: const Text('Diarsipkan',
                           style: TextStyle(fontWeight: FontWeight.w600)),
                       trailing: Text(
                         _users.where((u) => u.isArchived).length.toString(),
-                        style: const TextStyle(color: RupiaColors.primary, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: RupiaColors.primary, fontWeight: FontWeight.bold),
                       ),
                     ),
                   // ── Chat Pribadi ──────────────────────────────
@@ -557,16 +558,7 @@ class _UserTileState extends State<_UserTile> {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    String rawMsg = widget.user.lastMessage ?? 'Mulai percakapan...';
-    // Format pesan call agar tidak tampil JSON mentah
-    if (rawMsg.startsWith('{') && rawMsg.contains('call_type')) {
-      if (rawMsg.contains('"video"')) {
-        rawMsg = '📹 Panggilan Video';
-      } else {
-        rawMsg = '📞 Panggilan Suara';
-      }
-    }
-    final lastMessage = rawMsg;
+    final lastMessage = MessageModel.formatPreview(widget.user.lastMessage);
     final unreadCount = widget.user.unreadCount;
     final time = _formatTimeFromDate(widget.user.lastMessageTime);
 

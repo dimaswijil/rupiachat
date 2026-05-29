@@ -122,7 +122,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -167,7 +167,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: RupiaColors.primary))
+          ? Center(child: CircularProgressIndicator(color: RupiaColors.primary))
           : _step == 0
               ? _buildContactSelector(isDarkMode)
               : _buildGroupDetails(isDarkMode),
@@ -237,7 +237,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 hintStyle: TextStyle(
                   color: isDarkMode ? Colors.white54 : RupiaColors.textHint,
                 ),
-                prefixIcon: const Icon(Icons.search, color: RupiaColors.primary),
+                prefixIcon: Icon(Icons.search, color: RupiaColors.primary),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -262,7 +262,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
               if (_selectedIds.isNotEmpty)
                 Text(
                   '${_selectedIds.length} dipilih',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: RupiaColors.primary,
@@ -361,7 +361,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                               ),
                             ),
                             if (isSelected)
-                              const Icon(
+                              Icon(
                                 Icons.check_circle,
                                 color: RupiaColors.primary,
                                 size: 24,
@@ -398,7 +398,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                     color: RupiaColors.primary.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.group,
                     size: 40,
                     color: RupiaColors.primary,
@@ -410,7 +410,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   child: Container(
                     width: 28,
                     height: 28,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: RupiaColors.primary,
                       shape: BoxShape.circle,
                     ),
@@ -453,7 +453,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   color: isDarkMode ? Colors.white38 : RupiaColors.textHint,
                 ),
                 border: InputBorder.none,
-                icon: const Icon(Icons.group, color: RupiaColors.primary),
+                icon: Icon(Icons.group, color: RupiaColors.primary),
               ),
             ),
           ),

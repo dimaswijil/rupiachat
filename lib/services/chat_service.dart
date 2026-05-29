@@ -208,7 +208,7 @@ class ChatService {
     return _globalEventController.stream
         .where((event) => event.channelName == channelName)
         .where((event) => event.eventName == 'MessageSent' || event.eventName == 'App\\Events\\MessageSent')
-        .map((_) => null);
+        .map<void>((_) {});
   }
 
   Stream<Map<String, dynamic>> listenTyping(String roomId) {
@@ -301,16 +301,54 @@ class ChatService {
     } catch (e) { throw Exception('Gagal kirim pesan'); }
   }
 
-  Future<void> sendImage({required String roomId, required String senderId, required String filePath}) async {
+  Future<void> sendImage({required String roomId, required String senderId, required String filePath, String? caption}) async {
     try {
       final fileName = filePath.split('/').last;
       final formData = FormData.fromMap({
-        'room_id': roomId, 'sender_id': senderId, 'type': 'image', 'text': '[Gambar]',
+        'room_id': roomId,
+        'sender_id': senderId,
+        'type': 'image',
+        'text': '[Gambar]',
+        if (caption != null && caption.isNotEmpty) 'caption': caption,
         'image': await MultipartFile.fromFile(filePath, filename: fileName),
       });
       await _dio.post('/api/messages', data: formData, options: Options(contentType: 'multipart/form-data'));
     } catch (e) { throw Exception('Gagal kirim gambar'); }
   }
+
+  Future<void> sendPdf({required String roomId, required String senderId, required String filePath}) async {
+    try {
+      final fileName = filePath.split('/').last;
+      final formData = FormData.fromMap({
+        'room_id': roomId,
+        'sender_id': senderId,
+        'type': 'pdf',
+        'text': '[Dokumen PDF]',
+        'document': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+      await _dio.post('/api/messages', data: formData, options: Options(contentType: 'multipart/form-data'));
+    } catch (e) {
+      throw Exception('Gagal kirim dokumen PDF');
+    }
+  }
+
+  Future<void> sendAudio({required String roomId, required String senderId, required String filePath}) async {
+    try {
+      final fileName = filePath.split('/').last;
+      final formData = FormData.fromMap({
+        'room_id': roomId,
+        'sender_id': senderId,
+        'type': 'audio',
+        'text': '[Audio]',
+        'audio': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+      await _dio.post('/api/messages', data: formData, options: Options(contentType: 'multipart/form-data'));
+    } catch (e) {
+      throw Exception('Gagal kirim pesan suara');
+    }
+  }
+
+
 
   Future<void> sendTyping(String roomId, bool isTyping) async {
     try { await _dio.post('/api/messages/typing', data: {'room_id': roomId, 'is_typing': isTyping}); } catch (_) {}

@@ -104,6 +104,7 @@ class GroupMessageModel {
   final String? amount;
   final String? mediaUrl;
   final DateTime timestamp;
+  final String? caption;
 
   GroupMessageModel({
     required this.id,
@@ -116,6 +117,7 @@ class GroupMessageModel {
     this.amount,
     this.mediaUrl,
     required this.timestamp,
+    this.caption,
   });
 
   factory GroupMessageModel.fromMap(Map<String, dynamic> map) {
@@ -139,6 +141,7 @@ class GroupMessageModel {
         }
         return DateTime.now();
       })(),
+      caption: map['caption']?.toString(),
     );
   }
 }

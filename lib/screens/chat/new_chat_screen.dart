@@ -93,7 +93,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary],
@@ -115,7 +115,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
                 colors: [RupiaColors.primary, Color(0xFF2557B3)],
@@ -138,7 +138,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
                     color: isDarkMode ? Colors.white54 : RupiaColors.textHint,
                   ),
                   prefixIcon:
-                      const Icon(Icons.search, color: RupiaColors.primary),
+                      Icon(Icons.search, color: RupiaColors.primary),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -149,7 +149,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
           // ── Content ─────────────────────────────────────────
           Expanded(
             child: _loading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
                         color: RupiaColors.primary))
                 : ListView(

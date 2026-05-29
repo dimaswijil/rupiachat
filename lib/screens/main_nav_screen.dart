@@ -3,9 +3,10 @@ import 'dart:ui';
 import '../main.dart'; // Import mainNavIndexNotifier
 import 'chat/chat_list_screen.dart';
 import 'group/group_list_screen.dart';
-import 'wallet/wallet_screen.dart';
+import 'purchase/purchase_screen.dart';
 import 'call/call_history_screen.dart';
 import 'profile/profile_screen.dart';
+import '../services/purchase_service.dart';
 
 // MainNavScreen = layar utama dengan bottom navigation bar
 // Navbar menggunakan efek "Liquid Glass" — transparan, blur, dengan animasi smooth
@@ -22,7 +23,7 @@ class _MainNavScreenState extends State<MainNavScreen>
   final List<Widget> _screens = const [
     ChatListScreen(),       // index 0 → Chat
     GroupListScreen(),      // index 1 → Grup
-    WalletScreen(),         // index 2 → Wallet
+    PurchaseScreen(),       // index 2 → Beli
     CallHistoryScreen(),    // index 3 → Panggilan
     ProfileScreen(),        // index 4 → Profil
   ];
@@ -35,6 +36,7 @@ class _MainNavScreenState extends State<MainNavScreen>
   @override
   void initState() {
     super.initState();
+    PurchaseService().getActiveFeatures(); // Pre-fetch active features
     _previousIndex = mainNavIndexNotifier.value;
 
     // Controller untuk animasi perpindahan indikator
@@ -192,8 +194,8 @@ class _MainNavScreenState extends State<MainNavScreen>
                                       currentIndex,
                                     )),
                                     Expanded(child: _buildNavItem(
-                                      Icons.account_balance_wallet_outlined,
-                                      Icons.account_balance_wallet_rounded,
+                                      Icons.shopping_bag_outlined,
+                                      Icons.shopping_bag_rounded,
                                       'Beli',
                                       2,
                                       currentIndex,

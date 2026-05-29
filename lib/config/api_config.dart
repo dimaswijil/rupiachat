@@ -14,6 +14,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
@@ -33,9 +34,9 @@ class ApiConfig {
   /// Base URL yang aktif (diisi saat init)
   static String _baseUrl = 'http://localhost:$port';
 
-  /// --- KONFIGURASI NGROK ---
-  static const bool useNgrok = true; // Set false jika ingin kembali pakai IP Lokal (Auto-Discovery)
-  static const String ngrokUrl = 'https://cleaver-tadpole-wikipedia.ngrok-free.dev'; // Masukkan URL Ngrok kamu di sini
+  /// --- KONFIGURASI RAILWAY CLOUD ---
+  static const bool useRailway = true; // Set false jika ingin kembali pakai IP Lokal (Auto-Discovery)
+  static const String railwayUrl = 'https://rupiachat-api-production.up.railway.app'; // URL Railway Production
   /// -------------------------
 
   /// Getter untuk base URL
@@ -43,10 +44,10 @@ class ApiConfig {
 
   /// Inisialisasi — panggil di main() sebelum runApp
   static Future<void> init() async {
-    // 0. Cek apakah menggunakan Ngrok
-    if (useNgrok) {
-      _baseUrl = ngrokUrl;
-      print('✅ Menggunakan URL Ngrok publik: $_baseUrl');
+    // 0. Cek apakah menggunakan Railway
+    if (useRailway) {
+      _baseUrl = railwayUrl;
+      debugPrint('✅ Menggunakan URL Railway publik: $_baseUrl');
       return;
     }
 
@@ -56,18 +57,18 @@ class ApiConfig {
     final cachedIp = prefs.getString(_cacheKey);
     if (cachedIp != null && await _isServerReachable(cachedIp)) {
       _baseUrl = 'http://$cachedIp:$port';
-      print('✅ Server ditemukan di cached IP: $cachedIp');
+      debugPrint('✅ Server ditemukan di cached IP: $cachedIp');
       return;
     }
 
     // Cached IP gagal → hapus cache basi agar tidak dipakai lagi
     if (cachedIp != null) {
-      print('⚠️ Cached IP $cachedIp sudah tidak valid, menghapus cache...');
+      debugPrint('⚠️ Cached IP $cachedIp sudah tidak valid, menghapus cache...');
       await prefs.remove(_cacheKey);
     }
 
     // 2. Coba semua known IPs secara parallel
-    print('🔍 Mencoba known server IPs...');
+    debugPrint('🔍 Mencoba known server IPs...');
     final knownResults = await Future.wait(
       _knownServerIps.map((ip) async {
         if (await _isServerReachable(ip)) return ip;
@@ -78,19 +79,19 @@ class ApiConfig {
     if (knownHit != null) {
       _baseUrl = 'http://$knownHit:$port';
       await prefs.setString(_cacheKey, knownHit);
-      print('✅ Server ditemukan di known IP: $knownHit');
+      debugPrint('✅ Server ditemukan di known IP: $knownHit');
       return;
     }
 
     // 3. Scan SEMUA subnet dari semua network interface
     final subnets = await _getAllSubnets();
-    print('🔍 Scanning ${subnets.length} subnet(s): $subnets');
+    debugPrint('🔍 Scanning ${subnets.length} subnet(s): $subnets');
     for (final subnet in subnets) {
       final foundIp = await _scanSubnet(subnet);
       if (foundIp != null) {
         _baseUrl = 'http://$foundIp:$port';
         await prefs.setString(_cacheKey, foundIp);
-        print('✅ Server ditemukan via scan: $foundIp');
+        debugPrint('✅ Server ditemukan via scan: $foundIp');
         return;
       }
     }
@@ -98,9 +99,9 @@ class ApiConfig {
     // 4. Fallback: pakai known IP pertama
     if (_knownServerIps.isNotEmpty) {
       _baseUrl = 'http://${_knownServerIps.first}:$port';
-      print('⚠️ Server tidak ditemukan, pakai known IP: ${_knownServerIps.first}');
+      debugPrint('⚠️ Server tidak ditemukan, pakai known IP: ${_knownServerIps.first}');
     } else {
-      print('❌ Server tidak ditemukan di jaringan lokal');
+      debugPrint('❌ Server tidak ditemukan di jaringan lokal');
     }
   }
 
@@ -125,7 +126,7 @@ class ApiConfig {
       // Ini memastikan benar-benar server Laravel kita, bukan server lain
       final isOurServer = response.statusCode == 200 && body.contains('"status"') && body.contains('"ok"');
       if (!isOurServer) {
-        print('❌ $ip:$port bukan server Laravel kita (status=${response.statusCode}, body=${body.substring(0, body.length.clamp(0, 100))})');
+        debugPrint('❌ $ip:$port bukan server Laravel kita (status=${response.statusCode}, body=${body.substring(0, body.length.clamp(0, 100))})');
       }
       return isOurServer;
     } catch (_) {
@@ -151,12 +152,12 @@ class ApiConfig {
               ip.startsWith('172.')) {
             final subnet = ip.substring(0, ip.lastIndexOf('.'));
             subnets.add(subnet);
-            print('📡 Interface ${iface.name}: $ip (subnet: $subnet.*)');
+            debugPrint('📡 Interface ${iface.name}: $ip (subnet: $subnet.*)');
           }
         }
       }
     } catch (e) {
-      print('⚠️ Gagal list network interfaces: $e');
+      debugPrint('⚠️ Gagal list network interfaces: $e');
     }
     return subnets.toList();
   }

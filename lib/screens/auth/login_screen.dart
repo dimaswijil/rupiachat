@@ -212,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen>
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           // Judul — center aligned (simetris)
-                          const Text(
+                          Text(
                             'Selamat Datang',
                             textAlign: TextAlign.center,
                             style: TextStyle(
@@ -254,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
-                                borderSide: const BorderSide(
+                                borderSide: BorderSide(
                                   color: RupiaColors.primary,
                                   width: 1.5,
                                 ),
@@ -293,7 +293,7 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
-                                borderSide: const BorderSide(
+                                borderSide: BorderSide(
                                   color: RupiaColors.primary,
                                   width: 1.5,
                                 ),

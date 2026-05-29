@@ -392,7 +392,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           Padding(padding: const EdgeInsets.all(16),
             child: Text(memberName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
           if (memberRole != 'admin')
-            ListTile(leading: const Icon(Icons.admin_panel_settings, color: RupiaColors.primary),
+            ListTile(leading: Icon(Icons.admin_panel_settings, color: RupiaColors.primary),
               title: const Text('Jadikan Admin'), onTap: () { Navigator.pop(ctx); _makeAdmin(memberId, memberName); }),
           if (memberRole == 'admin')
             ListTile(leading: const Icon(Icons.person_outline, color: Colors.orange),
@@ -417,7 +417,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     if (_loading) {
       return Scaffold(backgroundColor: bgColor,
         appBar: AppBar(title: const Text('Info Grup')),
-        body: const Center(child: CircularProgressIndicator(color: RupiaColors.primary)));
+        body: Center(child: CircularProgressIndicator(color: RupiaColors.primary)));
     }
 
     final groupName = _group?['name'] ?? 'Grup';
@@ -432,7 +432,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
           title: const Text('Info Grup', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
           centerTitle: true,
-          flexibleSpace: Container(decoration: const BoxDecoration(
+          flexibleSpace: Container(decoration: BoxDecoration(
             gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [Color(0xFF0D2B6B), RupiaColors.primary]))),
         ),
@@ -441,7 +441,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         SliverToBoxAdapter(child: Container(
           width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 36),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
               colors: [RupiaColors.primary, Color(0xFF2557B3)]),
             boxShadow: [BoxShadow(color: RupiaColors.primary.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 4))],
           ),
@@ -502,14 +502,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(16),
                 boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
               child: _loadingCalls
-                  ? const Padding(padding: EdgeInsets.all(24),
+                  ? Padding(padding: const EdgeInsets.all(24),
                       child: Center(child: CircularProgressIndicator(color: RupiaColors.primary, strokeWidth: 2)))
                   : _callLogs.isEmpty
                       ? Padding(padding: const EdgeInsets.all(20),
                           child: Row(children: [
                             Container(width: 36, height: 36,
                               decoration: BoxDecoration(shape: BoxShape.circle, color: RupiaColors.primary.withOpacity(0.1)),
-                              child: const Icon(Icons.call_rounded, color: RupiaColors.primary, size: 18)),
+                              child: Icon(Icons.call_rounded, color: RupiaColors.primary, size: 18)),
                             const SizedBox(width: 14),
                             Text('Belum ada riwayat panggilan', style: TextStyle(fontSize: 14, color: subtextColor)),
                           ]))
@@ -569,7 +569,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       ? Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(color: RupiaColors.primary.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12)),
-                          child: const Text('Admin', style: TextStyle(color: RupiaColors.primary, fontSize: 11, fontWeight: FontWeight.w600)))
+                          child: Text('Admin', style: TextStyle(color: RupiaColors.primary, fontSize: 11, fontWeight: FontWeight.w600)))
                       : null,
                   onLongPress: () => _showMemberOptions(m),
                 ),
@@ -587,7 +587,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: Container(width: 36, height: 36,
                 decoration: BoxDecoration(shape: BoxShape.circle, color: RupiaColors.primary.withOpacity(0.1)),
-                child: const Icon(Icons.photo_library_rounded, color: RupiaColors.primary, size: 18)),
+                child: Icon(Icons.photo_library_rounded, color: RupiaColors.primary, size: 18)),
               title: Text('Media, Link, dan Dokumen', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textColor)),
               trailing: Icon(Icons.chevron_right, color: subtextColor, size: 22),
             ),

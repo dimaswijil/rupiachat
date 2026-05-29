@@ -66,8 +66,12 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
   void dispose() {
     _timer?.cancel();
     _shakeCtrl.dispose();
-    for (final c in _ctrls) c.dispose();
-    for (final f in _nodes) f.dispose();
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    for (final f in _nodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -88,7 +92,9 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     if (error != null) {
       _shakeCtrl.forward(from: 0);
       _showError(error);
-      for (final c in _ctrls) c.clear();
+      for (final c in _ctrls) {
+        c.clear();
+      }
       _nodes[0].requestFocus();
     } else {
       final prefs = await SharedPreferences.getInstance();
@@ -140,7 +146,9 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
       setState(() => _countdown = result['expires_in'] ?? 300);
       _startCountdown();
       _showSuccess('Kode OTP baru telah dikirim');
-      for (final c in _ctrls) c.clear();
+      for (final c in _ctrls) {
+        c.clear();
+      }
       _nodes[0].requestFocus();
     } else {
       _showError(result['error'] ?? 'Gagal mengirim ulang OTP');
@@ -175,12 +183,12 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
             // ── GRADIENT HEADER ─────────────────────────────
             Container(
               height: MediaQuery.of(context).size.height * 0.35,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: [Color(0xFF0D2B6B), RupiaColors.primary, Color(0xFF2557B3)],
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
             ),
 
@@ -337,7 +345,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
         maxLength: 1,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: RupiaColors.primary),
+        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: RupiaColors.primary),
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         decoration: InputDecoration(
           counterText: '',
@@ -351,7 +359,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: RupiaColors.primary, width: 2),
+            borderSide: BorderSide(color: RupiaColors.primary, width: 2),
           ),
         ),
         onChanged: (v) {

@@ -131,12 +131,12 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
             // ── GRADIENT HEADER ─────────────────────────────
             Container(
               height: MediaQuery.of(context).size.height * 0.35,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: [Color(0xFF0D2B6B), RupiaColors.primary, Color(0xFF2557B3)],
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
             ),
 
@@ -277,7 +277,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
       child: TextField(
         controller: _ctrls[i], focusNode: _nodes[i],
         keyboardType: TextInputType.number, textAlign: TextAlign.center, maxLength: 1,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: RupiaColors.primary),
+        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: RupiaColors.primary),
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         decoration: InputDecoration(
           counterText: '', filled: true,
@@ -287,7 +287,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen>
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: hasValue ? RupiaColors.primary.withOpacity(0.4) : Colors.grey.shade200)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: RupiaColors.primary, width: 2)),
+            borderSide: BorderSide(color: RupiaColors.primary, width: 2)),
         ),
         onChanged: (v) {
           setState(() {});

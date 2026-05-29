@@ -7,6 +7,10 @@ import 'dart:convert';
 import '../main.dart';
 import '../models/user_model.dart';
 import '../screens/call/incoming_call_screen.dart';
+import '../screens/call/call_screen.dart';
+import '../screens/call/group_call_screen.dart';
+import '../screens/call/controllers/agora_call_controller.dart';
+import 'call_api_service.dart';
 import '../screens/chat/chat_room_screen.dart';
 import '../screens/group/group_chat_screen.dart';
 import '../services/chat_service.dart';
@@ -140,28 +144,9 @@ class CallNotificationService {
         case Event.actionCallAccept:
           if (body['extra'] != null) {
             final data = Map<String, dynamic>.from(body['extra']);
-            // Arahkan otomatis ke layar panggilan saat di-accept!
-            Future.delayed(const Duration(seconds: 1), () {
-              if (data['type'] == 'incoming_group_call') {
-                 _showIncomingCall(
-                  callerName: data['caller_name'] ?? 'Unknown',
-                  callerId: data['caller_id'] ?? '',
-                  channelName: data['channel_name'] ?? '',
-                  callType: data['call_type'] ?? 'voice',
-                  callerPhoto: data['caller_photo'],
-                  isGroupCall: true,
-                  groupId: data['group_id'],
-                  groupName: data['group_name'],
-                );
-              } else {
-                 _showIncomingCall(
-                  callerName: data['caller_name'] ?? 'Unknown',
-                  callerId: data['caller_id'] ?? '',
-                  channelName: data['channel_name'] ?? '',
-                  callType: data['call_type'] ?? 'voice',
-                  callerPhoto: data['caller_photo'],
-                );
-              }
+            // Arahkan LANGSUNG ke layar panggilan aktif saat di-accept (menyelesaikan bug freeze 3 detik)
+            Future.delayed(const Duration(milliseconds: 100), () {
+              _navigateToActiveCallScreen(data);
             });
           }
           break;
@@ -188,28 +173,63 @@ class CallNotificationService {
   // Handle ketika decline dari native UI
   void _handleCallDeclineFromCallKit(Map<String, dynamic> data) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-      if (token == null) return;
-      
-      final chatService = ChatService();
-      chatService.setToken(token);
+      final apiService = CallApiService();
 
-      await chatService.sendCallSignal(
-        receiverId: data['caller_id'] ?? '',
+      await apiService.sendCallSignal(
+        targetId: data['caller_id'] ?? '',
         channelName: data['channel_name'] ?? '',
         signalType: 'decline',
       );
 
-      await chatService.saveCallLog(
-        receiverId: data['caller_id'] ?? '',
+      await apiService.saveCallLog(
+        otherUserId: data['caller_id'] ?? '',
         channelName: data['channel_name'] ?? '',
-        type: data['call_type'] ?? 'voice',
+        isVideoMode: data['call_type'] == 'video',
+        remoteUserJoined: false,
+        durationSeconds: 0,
         status: 'declined',
-        duration: 0,
       );
     } catch (e) {
       debugPrint('[IncomingCall] Error decline dari callkit: $e');
+    }
+  }
+
+  // Helper untuk melompat langsung ke layar panggilan aktif (menyelesaikan bug freeze 3 detik)
+  void _navigateToActiveCallScreen(Map<String, dynamic> data) {
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      if (kDebugMode) debugPrint('[Notif] Navigator not ready');
+      return;
+    }
+
+    final isGroup = data['type'] == 'incoming_group_call';
+    final isVideo = data['call_type'] == 'video';
+
+    if (isGroup) {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => GroupCallScreen(
+            channelName: data['channel_name'] ?? '',
+            groupName: data['group_name'] ?? data['caller_name'] ?? 'Grup',
+            isVideoCall: isVideo,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    } else {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            channelName: data['channel_name'] ?? '',
+            otherUserName: data['caller_name'] ?? 'Unknown',
+            otherUserId: data['caller_id'] ?? '',
+            otherUserPhoto: data['caller_photo'],
+            isVideoCall: isVideo,
+            isIncoming: true,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
     }
   }
 
@@ -418,6 +438,12 @@ class CallNotificationService {
       final navigator = navigatorKey.currentState;
       if (navigator != null && navigator.canPop()) {
         navigator.pop();
+      }
+    } else if (signalType == 'request_video' || signalType == 'accept_video' || signalType == 'decline_video') {
+      if (AgoraCallController.activeController != null) {
+        AgoraCallController.activeController!.handleIncomingSignal(data);
+      } else {
+        if (kDebugMode) debugPrint('[Notif] Peringatan: activeController bernilai null untuk sinyal $signalType.');
       }
     }
   }

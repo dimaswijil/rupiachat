@@ -59,12 +59,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             // ── GRADIENT HEADER ─────────────────────────────
             Container(
               height: MediaQuery.of(context).size.height * 0.35,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: [Color(0xFF0D2B6B), RupiaColors.primary, Color(0xFF2557B3)],
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
             ),
 
@@ -127,14 +127,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             decoration: InputDecoration(
                               hintText: 'contoh@email.com',
                               hintStyle: TextStyle(color: RupiaColors.textHint.withOpacity(0.6)),
-                              prefixIcon: const Icon(Icons.email_outlined, color: RupiaColors.primary, size: 20),
+                              prefixIcon: Icon(Icons.email_outlined, color: RupiaColors.primary, size: 20),
                               filled: true,
                               fillColor: RupiaColors.bg,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: RupiaColors.primary, width: 1.5),
+                                borderSide: BorderSide(color: RupiaColors.primary, width: 1.5),
                               ),
                             ),
                           ),
@@ -178,7 +178,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       onPressed: () => Navigator.pop(context),
                       child: RichText(text: TextSpan(style: const TextStyle(fontSize: 13), children: [
                         TextSpan(text: 'Sudah ingat? ', style: TextStyle(color: RupiaColors.textHint)),
-                        const TextSpan(text: 'Kembali login',
+                        TextSpan(text: 'Kembali login',
                             style: TextStyle(color: RupiaColors.primary, fontWeight: FontWeight.w700)),
                       ])),
                     ),

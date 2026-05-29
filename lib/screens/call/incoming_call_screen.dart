@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'call_screen.dart';
 import 'group_call_screen.dart';
-import '../../services/chat_service.dart';
-import '../../services/auth_service.dart';
+import 'controllers/incoming_call_controller.dart';
+import 'widgets/incoming/incoming_call_background.dart';
+import 'widgets/incoming/slide_to_answer.dart';
 
 class IncomingCallScreen extends StatefulWidget {
   final String callerName;
@@ -13,7 +12,6 @@ class IncomingCallScreen extends StatefulWidget {
   final String channelName;
   final String callType; // 'voice' or 'video'
   final String? callerPhoto;
-  // Untuk group call
   final bool isGroupCall;
   final String? groupId;
   final String? groupName;
@@ -36,30 +34,16 @@ class IncomingCallScreen extends StatefulWidget {
 
 class _IncomingCallScreenState extends State<IncomingCallScreen>
     with TickerProviderStateMixin {
-  late AnimationController _pulseController;
+  late final IncomingCallController _controller;
+
   late AnimationController _slideController;
-  late Animation<double> _pulseAnimation;
   late Animation<Offset> _slideAnimation;
-  Timer? _autoDeclineTimer;
-  bool _isResponded = false;
 
   @override
   void initState() {
     super.initState();
 
-    // Vibrate
-    HapticFeedback.heavyImpact();
-
-    // Pulse animation for avatar
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.12).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
-    // Slide up animation for buttons
+    // Slide up animation untuk panel tombol aksi
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -73,30 +57,31 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     ));
     _slideController.forward();
 
-    // Auto decline after 60 seconds
-    _autoDeclineTimer = Timer(const Duration(seconds: 60), () {
-      if (!_isResponded && mounted) {
-        _declineCall();
-      }
-    });
+    // Inisialisasi pengontrol panggilan masuk Agora
+    _controller = IncomingCallController(
+      callerId: widget.callerId,
+      channelName: widget.channelName,
+      callType: widget.callType,
+      onAutoDecline: () {
+        if (mounted) Navigator.pop(context);
+      },
+    );
+    _controller.addListener(_onControllerChanged);
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _slideController.dispose();
-    _autoDeclineTimer?.cancel();
-    super.dispose();
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
-  void _acceptCall() {
-    if (_isResponded) return;
-    _isResponded = true;
-    _autoDeclineTimer?.cancel();
+  void _acceptCall() async {
+    _controller.acceptCall();
+
+    // Delay minimal agar animasi IncomingCallScreen selesai & dispose bersih
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
 
     if (widget.isGroupCall) {
-      // Group call → arahkan ke GroupCallScreen agar channel prefix konsisten
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => GroupCallScreen(
@@ -105,9 +90,10 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
             isVideoCall: widget.callType == 'video',
           ),
         ),
+        (route) => route.isFirst,
       );
     } else {
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => CallScreen(
@@ -119,48 +105,23 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
             isIncoming: true,
           ),
         ),
+        (route) => route.isFirst,
       );
     }
   }
 
-  // FIXED Bug #19: await decline signal SEBELUM pop
-  // Tanpa ini, app bisa di-kill OS sebelum sinyal terkirim → caller stuck di 'ringing'
   void _declineCall() async {
-    if (_isResponded) return;
-    _isResponded = true;
-    _autoDeclineTimer?.cancel();
-
-    await _sendDeclineSignal();
-
+    // FIXED Bug #19: await decline signal SEBELUM pop
+    await _controller.declineCall();
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _sendDeclineSignal() async {
-    try {
-      final token = await AuthService().currentToken;
-      if (token == null) return;
-      
-      final chatService = ChatService();
-      chatService.setToken(token);
-
-      // Kirim sinyal ke penelpon bahwa panggilan ditolak
-      await chatService.sendCallSignal(
-        receiverId: widget.callerId,
-        channelName: widget.channelName,
-        signalType: 'decline',
-      );
-
-      // Simpan log panggilan sebagai 'declined'
-      await chatService.saveCallLog(
-        receiverId: widget.callerId,
-        channelName: widget.channelName,
-        type: widget.callType,
-        status: 'declined',
-        duration: 0,
-      );
-    } catch (e) {
-      debugPrint('[IncomingCall] Error sending decline signal: $e');
-    }
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _slideController.dispose();
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -175,110 +136,166 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       body: Stack(
         children: [
           // Background gradient + particles
-          _buildBackground(),
+          const IncomingCallBackground(),
           // Main content
           SafeArea(
             child: Column(
               children: [
                 const Spacer(flex: 2),
-                // Call type label
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.15),
+                
+                // Logo & Call Type Indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isVideo ? Icons.videocam_rounded : Icons.phone_callback_rounded,
+                      color: const Color(0xFF22C55E),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isVideo ? 'RupiaChat Video...' : 'RupiaChat Audio...',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Caller name
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    displayName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-                        color: const Color(0xFF4ADE80),
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        isVideo ? 'Panggilan Video Masuk' : 'Panggilan Suara Masuk',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-                const SizedBox(height: 32),
-                // Animated avatar
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (_, child) {
-                    return Transform.scale(
-                      scale: _pulseAnimation.value,
-                      child: child,
-                    );
-                  },
-                  child: _buildAvatar(displayName),
-                ),
-                const SizedBox(height: 28),
-                // Caller name
-                Text(
-                  displayName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
+                
                 if (widget.isGroupCall) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Text(
                     'dari ${widget.callerName}',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
+                      color: Colors.white.withOpacity(0.45),
                       fontSize: 15,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                // Animated "Memanggil..." text
-                _buildRingingText(),
-                const Spacer(flex: 3),
-                // Accept / Decline buttons
+                
+                const Spacer(flex: 6),
+
+                // Tombol Aksi Cepat: Pesan (Kiri) & Tolak (Kanan)
+                SlideTransition(
+                  position: _slideAnimation,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 60),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Tombol Pesan
+                        Column(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Fitur pesan cepat akan segera hadir'),
+                                    backgroundColor: Color(0xFF1E212A),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withOpacity(0.08),
+                                ),
+                                child: const Icon(
+                                  Icons.message_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Message',
+                              style: TextStyle(
+                                color: Colors.white60,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Tombol Tolak
+                        Column(
+                          children: [
+                            GestureDetector(
+                              onTap: _declineCall,
+                              child: Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.red.withOpacity(0.15),
+                                  border: Border.all(
+                                    color: Colors.red.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.call_end_rounded,
+                                  color: Colors.redAccent,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Tolak',
+                              style: TextStyle(
+                                color: Colors.white60,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Widget Slide to Answer
                 SlideTransition(
                   position: _slideAnimation,
                   child: Padding(
                     padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).padding.bottom + 40,
-                      left: 40,
-                      right: 40,
+                      bottom: MediaQuery.of(context).padding.bottom + 28,
+                      left: 36,
+                      right: 36,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Decline
-                        _buildActionButton(
-                          icon: Icons.call_end_rounded,
-                          label: 'Tolak',
-                          gradient: const [Color(0xFFEF4444), Color(0xFFDC2626)],
-                          onTap: _declineCall,
-                        ),
-                        // Accept
-                        _buildActionButton(
-                          icon: isVideo
-                              ? Icons.videocam_rounded
-                              : Icons.call_rounded,
-                          label: 'Terima',
-                          gradient: const [Color(0xFF22C55E), Color(0xFF16A34A)],
-                          onTap: _acceptCall,
-                        ),
-                      ],
+                    child: SlideToAnswer(
+                      onAnswer: _acceptCall,
+                      text: 'slide to answer',
                     ),
                   ),
                 ),
@@ -289,187 +306,4 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       ),
     );
   }
-
-  Widget _buildAvatar(String name) {
-    final initials = name.trim().split(' ').take(2)
-        .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
-        .join();
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Outer glow rings
-        ...List.generate(3, (i) {
-          return AnimatedBuilder(
-            animation: _pulseAnimation,
-            builder: (_, __) {
-              final scale = 1.0 + (i + 1) * 0.15 * _pulseAnimation.value;
-              return Transform.scale(
-                scale: scale,
-                child: Container(
-                  width: 130,
-                  height: 130,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF2557B3)
-                          .withOpacity(0.15 - (i * 0.04)),
-                      width: 2,
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        }),
-        // Main avatar
-        Container(
-          width: 130,
-          height: 130,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF2557B3), Color(0xFF0D2060)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 3,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF2557B3).withOpacity(0.5),
-                blurRadius: 40,
-                spreadRadius: 8,
-              ),
-            ],
-          ),
-          child: widget.callerPhoto != null && widget.callerPhoto!.isNotEmpty
-              ? ClipOval(
-                  child: Image.network(
-                    widget.callerPhoto!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Center(
-                      child: Text(initials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 44,
-                            fontWeight: FontWeight.w700,
-                          )),
-                    ),
-                  ),
-                )
-              : Center(
-                  child: Text(initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 44,
-                        fontWeight: FontWeight.w700,
-                      )),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRingingText() {
-    return TweenAnimationBuilder<int>(
-      tween: IntTween(begin: 0, end: 300),
-      duration: const Duration(seconds: 300),
-      builder: (_, val, __) {
-        final dots = '.' * ((val % 3) + 1);
-        return Text(
-          'Berdering$dots',
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 16,
-            fontWeight: FontWeight.w400,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required List<Color> gradient,
-    required VoidCallback onTap,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(colors: gradient),
-              boxShadow: [
-                BoxShadow(
-                  color: gradient[0].withOpacity(0.4),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Icon(icon, color: Colors.white, size: 32),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBackground() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0A0E21),
-            Color(0xFF1A1A3E),
-            Color(0xFF0D2B6B),
-          ],
-          stops: [0.0, 0.5, 1.0],
-        ),
-      ),
-      child: const CustomPaint(
-        painter: _IncomingParticlePainter(),
-        size: Size.infinite,
-      ),
-    );
-  }
-}
-
-// ── Subtle background particles ──
-class _IncomingParticlePainter extends CustomPainter {
-  const _IncomingParticlePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withOpacity(0.03);
-    final rng = Random(77);
-    for (int i = 0; i < 40; i++) {
-      final x = rng.nextDouble() * size.width;
-      final y = rng.nextDouble() * size.height;
-      final r = rng.nextDouble() * 3 + 1;
-      canvas.drawCircle(Offset(x, y), r, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
 }
