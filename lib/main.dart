@@ -42,11 +42,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       duration: 60000,
       extra: Map<String, dynamic>.from(data),
       android: const AndroidParams(
-        isCustomNotification: true,
+        isCustomNotification: false,
         isShowLogo: false,
         ringtonePath: 'system_ringtone_default',
         backgroundColor: '#0A0E21',
         actionColor: '#4CAF50',
+        isShowFullLockedScreen: true,
       ),
       ios: const IOSParams(
         iconName: 'AppIcon',

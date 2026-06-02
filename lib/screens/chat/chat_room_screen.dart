@@ -51,8 +51,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> with TickerProviderStat
   void initState() {
     super.initState();
 
-    _loadMessages();
+    // Setup listeners DULU agar tidak ada race condition:
+    // Pusher event yang datang sebelum _loadMessages selesai
+    // tidak akan langsung hilang karena sudah ada listener-nya.
     _setupListeners();
+    _loadMessages();
   }
 
   @override
@@ -178,6 +181,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> with TickerProviderStat
   }
 
   Future<void> _pickCameraImage() async {
+    if (!PurchaseService().isFeatureUnlocked('attachment')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member atau beli fitur Kirim Lampiran di menu Pembelian.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
     if (picked != null) {
@@ -512,6 +524,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> with TickerProviderStat
   }
 
   void _showAttachmentMenu(BuildContext context, bool isDark) {
+    if (!PurchaseService().isFeatureUnlocked('attachment')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member atau beli fitur Kirim Lampiran di menu Pembelian.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -794,10 +815,49 @@ class _MessageBubble extends StatelessWidget {
                     bottomRight: const Radius.circular(10),
                   ),
                   child: Hero(
-                    tag: message.text,
+                    // Gunakan ID unik agar tidak konflik antar bubble
+                    tag: 'img_${message.id}',
                     child: Image.network(
                       message.text,
                       fit: BoxFit.cover,
+                      // Loading: tampilkan shimmer placeholder
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          width: double.infinity,
+                          height: 200,
+                          color: Colors.grey.withOpacity(0.2),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              value: progress.expectedTotalBytes != null
+                                  ? progress.cumulativeBytesLoaded /
+                                      progress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                      // Error: tampilkan icon broken image
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint('[Image] Error loading: $error');
+                        return Container(
+                          width: double.infinity,
+                          height: 150,
+                          color: Colors.grey.withOpacity(0.15),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image_outlined,
+                                  color: Colors.grey, size: 40),
+                              SizedBox(height: 8),
+                              Text('Gagal memuat gambar',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -883,10 +943,47 @@ class _MessageBubble extends StatelessWidget {
                     bottomRight: const Radius.circular(8),
                   ),
                   child: Hero(
-                    tag: message.text,
+                    // Tag unik per pesan agar tidak konflik dengan bubble lain
+                    tag: 'img_${message.id}_cap',
                     child: Image.network(
                       message.text,
                       fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          width: double.infinity,
+                          height: 200,
+                          color: Colors.grey.withOpacity(0.2),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              value: progress.expectedTotalBytes != null
+                                  ? progress.cumulativeBytesLoaded /
+                                      progress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        debugPrint('[Image] Error loading: $error');
+                        return Container(
+                          width: double.infinity,
+                          height: 150,
+                          color: Colors.grey.withOpacity(0.15),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image_outlined,
+                                  color: Colors.grey, size: 40),
+                              SizedBox(height: 8),
+                              Text('Gagal memuat gambar',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -943,7 +1040,7 @@ class _MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 2),
         padding: (isSticker || isEmoji)
             ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
-            : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            : const EdgeInsets.fromLTRB(10, 6, 8, 6),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.70),
         decoration: (isSticker || isEmoji)
             ? null
@@ -963,55 +1060,131 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ],
               ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isAudio)
-              _AudioBubble(url: message.text, isMe: isMe)
-            else if (isPdf)
-              _PdfBubble(url: message.text, isMe: isMe)
-            else if (isSticker)
-              Text(
-                displayContent,
-                style: const TextStyle(fontSize: 60),
-              )
-            else
-              Text(
-                displayContent,
-                style: TextStyle(
-                  color: isEmoji ? null : textColor,
-                  fontSize: isEmoji ? 45 : 15,
-                  height: 1.3,
-                  fontStyle: isCallLog ? FontStyle.italic : FontStyle.normal,
-                ),
-              ),
-            const SizedBox(height: 2),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  timeStr,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: (isSticker || isEmoji)
-                        ? (isDark ? Colors.white70 : Colors.black54)
-                        : timeColor,
-                  ),
-                ),
-                if (isMe) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    message.isRead ? Icons.done_all : Icons.done,
-                    size: 13,
-                    color: message.isRead ? Colors.blue : ((isSticker || isEmoji) ? Colors.grey : timeColor),
-                  ),
-                ],
-              ],
-            ),
-          ],
+        child: _buildBubbleContent(
+          context: context,
+          isAudio: isAudio,
+          isPdf: isPdf,
+          isSticker: isSticker,
+          isEmoji: isEmoji,
+          displayContent: displayContent,
+          isCallLog: isCallLog,
+          timeStr: timeStr,
+          isDark: isDark,
+          textColor: textColor,
+          timeColor: timeColor,
         ),
       ),
+    );
+  }
+
+  /// Widget konten di dalam bubble — dipisahkan agar lebih mudah dibaca.
+  ///
+  /// Untuk teks biasa: menggunakan Wrap sehingga timestamp mengalir inline
+  /// di akhir baris terakhir teks (persis seperti WhatsApp). Bubble tidak
+  /// melebar lebih dari yang dibutuhkan teks itu sendiri.
+  Widget _buildBubbleContent({
+    required BuildContext context,
+    required bool isAudio,
+    required bool isPdf,
+    required bool isSticker,
+    required bool isEmoji,
+    required String displayContent,
+    required bool isCallLog,
+    required String timeStr,
+    required bool isDark,
+    required Color textColor,
+    required Color timeColor,
+  }) {
+    // Timestamp widget yang dipakai di berbagai tempat
+    Widget timestampWidget = Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            timeStr,
+            style: TextStyle(
+              fontSize: 11,
+              color: (isSticker || isEmoji)
+                  ? (isDark ? Colors.white70 : Colors.black54)
+                  : timeColor,
+            ),
+          ),
+          if (isMe) ...[
+            const SizedBox(width: 3),
+            Icon(
+              message.isRead ? Icons.done_all : Icons.done,
+              size: 13,
+              color: message.isRead
+                  ? Colors.blue
+                  : ((isSticker || isEmoji) ? Colors.grey : timeColor),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (isAudio) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AudioBubble(url: message.text, isMe: isMe),
+          const SizedBox(height: 2),
+          timestampWidget,
+        ],
+      );
+    }
+
+    if (isPdf) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PdfBubble(url: message.text, isMe: isMe),
+          const SizedBox(height: 2),
+          timestampWidget,
+        ],
+      );
+    }
+
+    // Sticker & emoji: teks besar tanpa bubble background,
+    // timestamp di bawah secara terpisah
+    if (isSticker || isEmoji) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            displayContent,
+            style: TextStyle(fontSize: isEmoji ? 45 : 60),
+          ),
+          timestampWidget,
+        ],
+      );
+    }
+
+    // Teks biasa: Wrap agar timestamp mengalir inline di akhir teks.
+    // - Jika baris terakhir teks cukup panjang → timestamp turun ke baris baru
+    // - Jika teks pendek → timestamp di baris yang sama
+    // Ini yang membuat bubble WhatsApp pas dengan konten, tidak melebar paksa.
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      children: [
+        Text(
+          displayContent,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 15,
+            height: 1.3,
+            fontStyle: isCallLog ? FontStyle.italic : FontStyle.normal,
+          ),
+        ),
+        // Spacer transparan: mendorong timestamp ke kanan
+        const SizedBox(width: 6),
+        timestampWidget,
+      ],
     );
   }
 

@@ -17,6 +17,7 @@ import '../call/group_call_screen.dart';
 import '../../widgets/call_bubble.dart';
 import '../../services/call_api_service.dart';
 import 'group_info_screen.dart';
+import '../../services/purchase_service.dart';
 
 /// Chat room untuk grup — mirip dengan ChatRoomScreen tapi untuk grup
 class GroupChatScreen extends StatefulWidget {
@@ -143,6 +144,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _pickCameraImage() async {
+    if (!PurchaseService().isFeatureUnlocked('attachment')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member atau beli fitur Kirim Lampiran di menu Pembelian.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image != null) {
       _handlePhotoSend(image.path);
@@ -541,6 +551,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _showAttachmentMenu(BuildContext context, bool isDark) {
+    if (!PurchaseService().isFeatureUnlocked('attachment')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fitur terkunci. Dapatkan VIP Member atau beli fitur Kirim Lampiran di menu Pembelian.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -861,8 +880,13 @@ class _GroupMessageBubble extends StatelessWidget {
             ),
           if (!isMe) const SizedBox(width: 4),
 
-          Flexible(
+          // IntrinsicWidth: bubble pas dengan konten, tidak melebar penuh seperti Flexible
+          IntrinsicWidth(
             child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.68,
+                minWidth: 80,
+              ),
               padding: isImage
                   ? (caption != null && caption!.isNotEmpty
                       ? const EdgeInsets.all(4)
@@ -933,13 +957,27 @@ class _GroupMessageBubble extends StatelessWidget {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(6),
                               child: Hero(
-                                tag: text,
+                                // Tag unik: kombinasi sender + time agar tidak konflik
+                                tag: 'grp_img_${senderName ?? ''}_${time}_cap',
                                 child: Image.network(
                                   text,
-                                  width: 240,
+                                  width: double.infinity,
                                   fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(
+                                      width: double.infinity,
+                                      height: 180,
+                                      color: Colors.grey.withOpacity(0.15),
+                                      child: const Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   errorBuilder: (_, __, ___) => Container(
-                                    width: 240,
+                                    width: double.infinity,
                                     height: 120,
                                     decoration: BoxDecoration(
                                       color: isDarkMode
@@ -947,8 +985,16 @@ class _GroupMessageBubble extends StatelessWidget {
                                           : Colors.grey.shade100,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: const Icon(Icons.broken_image,
-                                        color: Colors.grey),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.broken_image_outlined,
+                                            color: Colors.grey, size: 32),
+                                        SizedBox(height: 4),
+                                        Text('Gagal memuat',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1001,13 +1047,27 @@ class _GroupMessageBubble extends StatelessWidget {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(6),
                               child: Hero(
-                                tag: text,
+                                // Tag unik: kombinasi sender + time
+                                tag: 'grp_img_${senderName ?? ''}_$time',
                                 child: Image.network(
                                   text,
-                                  width: 240,
+                                  width: double.infinity,
                                   fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(
+                                      width: double.infinity,
+                                      height: 180,
+                                      color: Colors.grey.withOpacity(0.15),
+                                      child: const Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   errorBuilder: (_, __, ___) => Container(
-                                    width: 240,
+                                    width: double.infinity,
                                     height: 120,
                                     decoration: BoxDecoration(
                                       color: isDarkMode
@@ -1015,8 +1075,16 @@ class _GroupMessageBubble extends StatelessWidget {
                                           : Colors.grey.shade100,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: const Icon(Icons.broken_image,
-                                        color: Colors.grey),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.broken_image_outlined,
+                                            color: Colors.grey, size: 32),
+                                        SizedBox(height: 4),
+                                        Text('Gagal memuat',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1045,7 +1113,8 @@ class _GroupMessageBubble extends StatelessWidget {
                   else if (isPdf)
                     _buildPdfBubble(context, text, isMe, isDarkMode, time)
                   else
-                    // Text + time in same row (WhatsApp style)
+                    // Text + time — IntrinsicWidth memastikan bubble pas dengan teks
+                    // Wrap: timestamp ikut di baris yang sama jika muat, atau turun jika tidak
                     Wrap(
                       alignment: WrapAlignment.end,
                       crossAxisAlignment: WrapCrossAlignment.end,
@@ -1062,9 +1131,7 @@ class _GroupMessageBubble extends StatelessWidget {
                             height: 1.3,
                           ),
                         ),
-                        // Spacer invisible agar time tidak terlalu nempel
                         const SizedBox(width: 8),
-                        // Time badge
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
